@@ -18,7 +18,18 @@ export function useWalletAddress(): Address | undefined {
   return connected?.account.address as Address | undefined;
 }
 
-export function ConnectButton({ className = "" }: { className?: string }) {
+/** `chip` is the header pill. `action` is the in-form primary, which has to be
+ *  indistinguishable from the "Enter an amount" button it swaps places with —
+ *  same height, same pearl gradient, same body type. */
+type Variant = "chip" | "action";
+
+export function ConnectButton({
+  className = "",
+  variant = "chip",
+}: {
+  className?: string;
+  variant?: Variant;
+}) {
   const ready = useIsWalletReady(client);
   const wallets = useWallets(client);
   const connected = useConnectedWallet(client);
@@ -33,13 +44,32 @@ export function ConnectButton({ className = "" }: { className?: string }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const base =
-    "num inline-flex h-10 items-center gap-2 rounded-full border px-4 text-xs font-semibold uppercase tracking-wide transition-all";
+  const action = variant === "action";
+
+  // The chip draws its own shape; the action variant inherits `.btn` so the
+  // metrics stay locked to the trade button rather than tracking it by eye.
+  const base = action
+    ? "btn w-full"
+    : "num inline-flex h-10 items-center gap-2 rounded-full border px-4 text-xs font-semibold uppercase tracking-wide transition-all";
+
+  /** The filled, "do the thing" look in each variant. */
+  const primary = action
+    ? "btn-grad"
+    : "border-transparent bg-ink text-white hover:opacity-90";
+
+  /** The outlined, "not yet actionable" look. */
+  const quiet = action
+    ? "btn-ghost"
+    : "border-rule-strong text-ink hover:bg-paper";
 
   if (!mounted || !ready) {
     return (
       <span
-        className={`${base} border-rule text-faint ${className}`}
+        className={
+          action
+            ? `${base} btn-ghost text-faint ${className}`
+            : `${base} border-rule text-faint ${className}`
+        }
         aria-live="polite"
       >
         Looking for wallets
@@ -51,7 +81,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
     return (
       <button
         onClick={() => disconnect()}
-        className={`${base} border-transparent bg-ink text-white hover:opacity-90 ${className}`}
+        className={`${base} ${primary} ${className}`}
         title={connected.account.address}
       >
         <span
@@ -71,7 +101,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
         href="https://solana.com/solana-wallets"
         target="_blank"
         rel="noreferrer"
-        className={`${base} border-rule-strong text-ink hover:bg-paper ${className}`}
+        className={`${base} ${quiet} ${className}`}
       >
         Get a wallet
       </a>
@@ -83,7 +113,7 @@ export function ConnectButton({ className = "" }: { className?: string }) {
       <button
         disabled={connecting}
         onClick={() => connect(wallets[0])}
-        className={`${base} border-transparent bg-ink text-white hover:opacity-90 disabled:opacity-60 ${className}`}
+        className={`${base} ${primary} disabled:opacity-60 ${className}`}
       >
         {connecting ? "Approve in wallet" : "Connect wallet"}
       </button>
@@ -97,14 +127,16 @@ export function ConnectButton({ className = "" }: { className?: string }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="menu"
-        className={`${base} w-full border-transparent bg-ink text-white hover:opacity-90 disabled:opacity-60`}
+        className={`${base} w-full ${primary} disabled:opacity-60`}
       >
         {connecting ? "Approve in wallet" : "Connect wallet"}
       </button>
       {open ? (
         <div
           role="menu"
-          className="card absolute right-0 z-50 mt-2 w-52 p-1.5"
+          className={`card absolute right-0 z-50 mt-2 p-1.5 ${
+            action ? "w-full" : "w-52"
+          }`}
         >
           {wallets.map((wallet) => (
             <button

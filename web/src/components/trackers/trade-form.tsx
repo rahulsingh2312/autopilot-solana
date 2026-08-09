@@ -287,7 +287,7 @@ export function TradeForm({
       ) : null}
 
       {!owner ? (
-        <ConnectButton className="w-full" />
+        <ConnectButton variant="action" className="w-full" />
       ) : (
         <button
           onClick={() => dispatch()}
