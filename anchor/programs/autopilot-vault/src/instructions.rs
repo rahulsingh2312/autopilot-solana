@@ -1,3 +1,4 @@
+pub mod admin_control;
 pub mod close_tracker;
 pub mod deposit;
 pub mod initialize_tracker;
@@ -8,6 +9,7 @@ pub mod redeem_in_kind;
 pub mod set_token_metadata;
 pub mod swap_leg;
 
+pub use admin_control::*;
 pub use close_tracker::*;
 pub use deposit::*;
 pub use initialize_tracker::*;

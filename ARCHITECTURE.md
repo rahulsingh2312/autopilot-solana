@@ -87,6 +87,8 @@ that is every leg, because tokenized equities are mainnet-only.
 | `swap_leg(amount_in, min_out, route)` | authority | Routes one leg through Jupiter, signed by the **vault PDA**. Custody is never broken |
 | `push_multiplier(feed_id, multiplier)` | authority | Records a leg's Pyth feed and xStocks rebasing multiplier in a `LegOracle` PDA |
 | `close_tracker` | authority | Retires a tracker. **Refuses while any share is outstanding** |
+| `emergency_withdraw_sol` / `_token` | authority | Removes vault assets. The one path that can take value from holders |
+| `set_authority` | authority | Hands control of a tracker to another key |
 | `set_paused(bool)` | authority | Halts deposits only |
 | `set_fees(deposit_ppm, redeem_ppm)` | authority | Within the compiled 3% ceiling |
 | `set_token_metadata(name, symbol, uri)` | authority | Metaplex CPI. Required because the mint authority is a PDA, so only the program can sign |
@@ -98,6 +100,12 @@ that is every leg, because tokenized equities are mainnet-only.
   rather than quietly costing the user.
 - **Pausing cannot trap funds.** `set_paused` gates `deposit` only; redemption
   paths never check it.
+- **The authority can, though.** `emergency_withdraw_sol` and
+  `emergency_withdraw_token` let the authority key remove vault assets outright,
+  and `set_authority` hands that power to another key. They exist so a stuck or
+  half-rebalanced vault can be recovered by hand. This is a deliberate trade of
+  trustlessness for operability, it is disclosed on the risk page, and every use
+  emits an event — but it means holders trust the key, not only the code.
 - **Fees are capped in the program**, not just the UI.
 - **Rent reserve is excluded from NAV** and guarded on every payout.
 - **u128 intermediate math** (`mul_div`) so a large vault cannot overflow.

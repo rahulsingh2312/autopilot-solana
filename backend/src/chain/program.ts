@@ -53,6 +53,15 @@ export const TRACKER_DISCRIMINATOR = new Uint8Array([
 
 export const TOKEN_PROGRAM_ADDRESS =
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+/**
+ * Token-2022. Every xStock is issued under this program, not the classic one:
+ * they carry a permanent delegate, a pausable config, and the rebasing
+ * multiplier as a `scaledUiAmount` extension. Deriving a leg's vault token
+ * account with the classic program id produces an address that simply is not
+ * the account, so this distinction is load-bearing rather than cosmetic.
+ */
+export const TOKEN_2022_PROGRAM_ADDRESS =
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS =
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
 export const SYSTEM_PROGRAM_ADDRESS = "11111111111111111111111111111111" as Address;
@@ -90,18 +99,30 @@ export async function findShareMintPda(tracker: Address): Promise<Address> {
 export async function findAssociatedTokenPda(
   owner: Address,
   mint: Address,
+  tokenProgram: Address = TOKEN_PROGRAM_ADDRESS,
 ): Promise<Address> {
   const encoder = getAddressEncoder();
   const [address] = await getProgramDerivedAddress({
     programAddress: ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
     seeds: [
       encoder.encode(owner),
-      encoder.encode(TOKEN_PROGRAM_ADDRESS),
+      encoder.encode(tokenProgram),
       encoder.encode(mint),
     ],
   });
   return address;
 }
+
+/**
+ * Which token program owns a mint, read from the chain rather than assumed.
+ *
+ * wSOL is classic, every xStock is Token-2022, and a future leg could be
+ * either — so this is a lookup, not a constant.
+ */
+export const tokenProgramForOwner = (owner: string): Address =>
+  owner === TOKEN_2022_PROGRAM_ADDRESS
+    ? TOKEN_2022_PROGRAM_ADDRESS
+    : TOKEN_PROGRAM_ADDRESS;
 
 // ── Accounts ──────────────────────────────────────────────────────────
 

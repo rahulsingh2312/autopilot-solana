@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
-use anchor_spl::token::{burn, transfer_checked, Burn, Mint, Token, TokenAccount, TransferChecked};
+use anchor_spl::token_2022::{burn, transfer_checked, Burn, TransferChecked};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::VaultError;
@@ -25,7 +26,7 @@ pub struct RedeemInKind<'info> {
         seeds = [SHARE_SEED, tracker.key().as_ref()],
         bump = tracker.mint_bump,
     )]
-    pub share_mint: Account<'info, Mint>,
+    pub share_mint: InterfaceAccount<'info, Mint>,
 
     #[account(
         mut,
@@ -39,9 +40,13 @@ pub struct RedeemInKind<'info> {
         constraint = holder_shares.mint == tracker.share_mint @ VaultError::TokenAccountMintMismatch,
         constraint = holder_shares.owner == holder.key() @ VaultError::TokenAccountOwnerMismatch,
     )]
-    pub holder_shares: Account<'info, TokenAccount>,
+    pub holder_shares: InterfaceAccount<'info, TokenAccount>,
 
-    pub token_program: Program<'info, Token>,
+    /// Either token program. xStocks are Token-2022, so pinning this to the
+    /// classic program made the vault's own legs undeliverable — the redemption
+    /// path this product relies on as its escape hatch would have failed on
+    /// exactly the assets it exists to return.
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
     //
     // `remaining_accounts` carries, for each tokenized leg in basket order,
@@ -155,7 +160,7 @@ pub fn handle_redeem_in_kind<'info>(
 
     burn(
         CpiContext::new(
-            Token::id(),
+            ctx.accounts.token_program.key(),
             Burn {
                 mint: ctx.accounts.share_mint.to_account_info(),
                 from: ctx.accounts.holder_shares.to_account_info(),
@@ -177,7 +182,7 @@ pub fn handle_redeem_in_kind<'info>(
         }
         transfer_checked(
             CpiContext::new_with_signer(
-                Token::id(),
+                ctx.accounts.token_program.key(),
                 TransferChecked {
                     from: remaining[delivery.mint_index + 1].to_account_info(),
                     mint: remaining[delivery.mint_index].to_account_info(),

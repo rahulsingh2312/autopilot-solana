@@ -24,6 +24,14 @@ export default function RiskPage() {
           ],
         },
         {
+          heading: "The operator can move vault assets",
+          body: [
+            "Each tracker has an authority key. That key can publish new weights, pause deposits, change fees, route the vault's assets through a swap, hand control to another key, and withdraw SOL or tokenized holdings out of the vault entirely. It exists so a stuck, half-rebalanced or broken vault can be recovered and holders made whole by hand.",
+            "The consequence is direct: you are not only trusting the code, you are trusting whoever holds that key. Your claim on the vault is enforced by the program right up until the authority chooses otherwise. Every withdrawal and every change of authority emits an on-chain event, so the record is public, but a record is not a restraint.",
+            "Redemption does not depend on the operator. Burning your tokens for SOL, or in kind for a pro-rata slice of each holding, is open to you at any time and is never gated by the pause switch.",
+          ],
+        },
+        {
           heading: "A tracker token is not a share",
           body: [
             "Holding a tracker token gives you a pro-rata claim on whatever the vault holds. It gives you no ownership of any company, no vote, no dividend, and no rights against any issuer or any person the tracker is named after.",
@@ -34,6 +42,7 @@ export default function RiskPage() {
           heading: "Tokenized equities carry issuer risk",
           body: [
             `On mainnet, vaults would hold tokens issued by ${ISSUER.issuer} under the ${ISSUER.name} programme. That is a claim on an entity, collateralized by shares that entity holds. If the issuer fails, is unable to redeem, or loses access to the underlying shares, the token's value depends on the outcome of that failure, not on the stock price.`,
+            "These tokens are Token-2022 mints carrying a permanent delegate and a pausable configuration. In plain terms, the issuer can move the tokens out of any account, including a vault's, and can halt all transfers. Neither power has been exercised, and neither is something this protocol can decline or override by holding the tokens differently.",
             "Tokenized equities also carry transfer restrictions and jurisdictional limits set by their issuer, which can change without reference to this protocol.",
           ],
         },

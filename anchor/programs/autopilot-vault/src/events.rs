@@ -90,3 +90,25 @@ pub struct MultiplierPushed {
     pub multiplier_micros: u64,
     pub timestamp: i64,
 }
+
+/// The authority removed assets from a vault.
+///
+/// Emitted on every emergency withdrawal, with `mint` left as the default
+/// pubkey for a SOL sweep. This is the one action in the program that can take
+/// value away from holders, so its audit trail is deliberately public.
+#[event]
+pub struct EmergencyWithdrawn {
+    pub tracker: Pubkey,
+    pub mint: Pubkey,
+    pub amount: u64,
+    pub destination: Pubkey,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct AuthorityChanged {
+    pub tracker: Pubkey,
+    pub previous: Pubkey,
+    pub current: Pubkey,
+    pub timestamp: i64,
+}

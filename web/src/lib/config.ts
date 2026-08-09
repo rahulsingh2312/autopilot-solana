@@ -35,7 +35,7 @@ export const BRAND = {
   byline: "by Autopilot",
   domain: "autopilot-solana.vercel.app",
   tagline: "Famous portfolios, one token each.",
-  contactEmail: "hello@autopilot.fund",
+  contactEmail: "rahulsinghhh2312@gmail.com",
   repo: "https://github.com/rahulsingh2312/autopilot-solana",
   twitter: "https://x.com",
 } as const;

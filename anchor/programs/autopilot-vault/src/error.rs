@@ -64,4 +64,6 @@ pub enum VaultError {
     MultiplierOutOfRange,
     #[msg("Price feed id is empty")]
     InvalidFeedId,
+    #[msg("New authority cannot be the default pubkey")]
+    InvalidAuthority,
 }

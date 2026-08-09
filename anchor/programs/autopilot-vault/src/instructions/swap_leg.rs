@@ -2,9 +2,8 @@ use anchor_lang::prelude::*;
 use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
 use anchor_lang::solana_program::program::invoke_signed;
 use anchor_lang::system_program::{transfer, Transfer};
-use anchor_spl::token::{
-    close_account, sync_native, CloseAccount, Mint, SyncNative, Token, TokenAccount,
-};
+use anchor_spl::token_2022::{close_account, sync_native, CloseAccount, SyncNative};
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
 use crate::constants::*;
 use crate::error::VaultError;
@@ -48,7 +47,7 @@ pub struct SwapLeg<'info> {
         constraint = source_token_account.mint == source_mint.key()
             @ VaultError::TokenAccountMintMismatch,
     )]
-    pub source_token_account: Account<'info, TokenAccount>,
+    pub source_token_account: InterfaceAccount<'info, TokenAccount>,
 
     /// What is being bought. Must also be owned by the vault, so a swap can
     /// never deliver to an address the authority nominates.
@@ -59,12 +58,16 @@ pub struct SwapLeg<'info> {
         constraint = destination_token_account.mint == destination_mint.key()
             @ VaultError::TokenAccountMintMismatch,
     )]
-    pub destination_token_account: Account<'info, TokenAccount>,
+    pub destination_token_account: InterfaceAccount<'info, TokenAccount>,
 
-    pub source_mint: Account<'info, Mint>,
-    pub destination_mint: Account<'info, Mint>,
+    pub source_mint: InterfaceAccount<'info, Mint>,
+    pub destination_mint: InterfaceAccount<'info, Mint>,
 
-    pub token_program: Program<'info, Token>,
+    /// Either SPL Token or Token-2022. xStocks are Token-2022 — with a permanent
+    /// delegate, a pausable config and a scaled-UI-amount multiplier — so pinning
+    /// this to the classic program made every real basket leg unreachable: the
+    /// derived token accounts would not even be the right addresses.
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
 
     /// CHECK: pinned to `JUPITER_PROGRAM_ID` below; never taken on trust.
@@ -149,7 +152,7 @@ pub fn handle_swap_leg<'info>(
             amount_in,
         )?;
         sync_native(CpiContext::new(
-            Token::id(),
+            ctx.accounts.token_program.key(),
             SyncNative {
                 account: ctx.accounts.source_token_account.to_account_info(),
             },
@@ -212,7 +215,7 @@ pub fn handle_swap_leg<'info>(
     // lamports to the vault, which is where the SOL sleeve lives.
     if destination_mint == WSOL_MINT {
         close_account(CpiContext::new_with_signer(
-            Token::id(),
+            ctx.accounts.token_program.key(),
             CloseAccount {
                 account: ctx.accounts.destination_token_account.to_account_info(),
                 destination: ctx.accounts.vault.to_account_info(),
@@ -222,7 +225,7 @@ pub fn handle_swap_leg<'info>(
         ))?;
     } else if source_mint == WSOL_MINT && source_after > 0 {
         close_account(CpiContext::new_with_signer(
-            Token::id(),
+            ctx.accounts.token_program.key(),
             CloseAccount {
                 account: ctx.accounts.source_token_account.to_account_info(),
                 destination: ctx.accounts.vault.to_account_info(),

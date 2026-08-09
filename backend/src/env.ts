@@ -43,7 +43,7 @@ const CLUSTER = str("CLUSTER", "devnet") as Cluster;
  */
 const SEC_USER_AGENT = str(
   "SEC_USER_AGENT",
-  "Autopilot Research (hello@autopilot.fund)",
+  "Autopilot Research (rahulsinghhh2312@gmail.com)",
 );
 
 /**

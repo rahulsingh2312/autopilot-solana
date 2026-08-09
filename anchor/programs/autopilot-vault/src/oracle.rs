@@ -273,7 +273,10 @@ pub fn value_tokenized_legs<'info>(
             VaultError::OracleMintMismatch
         );
 
-        let token_account = Account::<anchor_spl::token::TokenAccount>::try_from(token_info)?;
+        // Interface account: xStocks are Token-2022, and the classic deserializer
+        // rejects a mint carrying extensions.
+        let token_account =
+            InterfaceAccount::<anchor_spl::token_interface::TokenAccount>::try_from(token_info)?;
         require!(
             token_account.mint == leg.mint,
             VaultError::TokenAccountMintMismatch

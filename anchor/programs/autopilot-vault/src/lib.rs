@@ -111,6 +111,27 @@ pub mod autopilot_vault {
         instructions::push_multiplier::handle_push_multiplier(ctx, feed_id, multiplier_micros)
     }
 
+    /// Sweep lamports out of a vault, keeping it rent-exempt.
+    pub fn emergency_withdraw_sol(
+        ctx: Context<EmergencyWithdraw>,
+        lamports: u64,
+    ) -> Result<()> {
+        instructions::admin_control::handle_emergency_withdraw_sol(ctx, lamports)
+    }
+
+    /// Move a tokenized leg out of a vault.
+    pub fn emergency_withdraw_token(
+        ctx: Context<EmergencyWithdrawToken>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::admin_control::handle_emergency_withdraw_token(ctx, amount)
+    }
+
+    /// Hand control of a tracker to a new key.
+    pub fn set_authority(ctx: Context<SetAuthority>, new_authority: Pubkey) -> Result<()> {
+        instructions::admin_control::handle_set_authority(ctx, new_authority)
+    }
+
     /// Retire a tracker. Refuses while any share is outstanding.
     pub fn close_tracker(ctx: Context<CloseTracker>) -> Result<()> {
         instructions::close_tracker::handle_close_tracker(ctx)

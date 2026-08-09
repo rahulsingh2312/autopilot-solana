@@ -108,7 +108,62 @@ async function cmdHoldings() {
   }
 }
 
+/**
+ * The tokenized equities a vault could actually trade, ranked by pool depth.
+ *
+ * Backed has minted hundreds of xStocks on Solana, but minting is not
+ * liquidity: most have never traded and Jupiter cannot price them at all. A
+ * basket drawn from the tail is publishable but not executable, so this is the
+ * list any new tracker has to be designed against.
+ */
+async function cmdTradable() {
+  const { loadDirectory } = await import("./mapping/xstocks.ts");
+  const directory = await loadDirectory();
+  const assets = Object.values(directory).filter((a) => a.mint);
+
+  const priced: Array<{ symbol: string; liquidity: number; price: number }> = [];
+  for (let i = 0; i < assets.length; i += 50) {
+    const chunk = assets.slice(i, i + 50);
+    try {
+      const response = await fetch(
+        `https://lite-api.jup.ag/price/v3?ids=${chunk.map((a) => a.mint).join(",")}`,
+        { headers: { accept: "application/json" } },
+      );
+      if (!response.ok) continue;
+      const body = (await response.json()) as Record<string, { usdPrice?: number; liquidity?: number }>;
+      for (const asset of chunk) {
+        const entry = body[asset.mint!];
+        if (typeof entry?.usdPrice !== "number") continue;
+        priced.push({
+          symbol: asset.symbol,
+          liquidity: entry.liquidity ?? 0,
+          price: entry.usdPrice,
+        });
+      }
+    } catch {
+      // A chunk that fails is reported as missing depth, never as zero depth.
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  priced.sort((a, b) => b.liquidity - a.liquidity);
+  const usd = (v: number) => `$${Math.round(v).toLocaleString()}`;
+
+  console.log(`minted on Solana: ${assets.length}   priced by Jupiter: ${priced.length}\n`);
+  console.log(`${"symbol".padEnd(10)}${"price".padStart(10)}${"liquidity".padStart(14)}`);
+  for (const row of priced.slice(0, 30)) {
+    console.log(`${row.symbol.padEnd(10)}${row.price.toFixed(2).padStart(10)}${usd(row.liquidity).padStart(14)}`);
+  }
+
+  const over = (n: number) => priced.filter((r) => r.liquidity > n).length;
+  console.log(
+    `\n>$1M: ${over(1e6)}   >$250k: ${over(250e3)}   >$50k: ${over(50e3)}   ` +
+      `any price: ${priced.length}   minted: ${assets.length}`,
+  );
+}
+
 const COMMANDS: Record<string, () => Promise<void>> = {
+  tradable: cmdTradable,
   ingest: cmdIngest,
   plan: cmdPlan,
   publish: cmdPublish,

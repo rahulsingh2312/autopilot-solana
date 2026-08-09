@@ -16,6 +16,7 @@ import {
   decodeTracker,
   findAssociatedTokenPda,
   findShareMintPda,
+  tokenProgramForOwner,
   findTrackerPda,
   findVaultPda,
   ZERO_ADDRESS,
@@ -29,6 +30,8 @@ export type LegHolding = {
   weightBps: number;
   /** Vault's ATA for this mint. Present whether or not it has been created. */
   ata: Address;
+  /** Token program that owns this mint: classic SPL, or Token-2022. */
+  tokenProgram: Address;
   /** Base units held. Zero also means "ATA does not exist yet". */
   amount: bigint;
   exists: boolean;
@@ -94,9 +97,36 @@ export async function readTrackerState(ticker: string): Promise<TrackerState | n
 
   // Second round trip: the vault's token account per tokenized leg. Their
   // addresses derive from the basket, which we only learned above.
+  //
+  // The mints are read first because the associated-token address depends on
+  // which token program owns the mint, and xStocks are Token-2022 rather than
+  // classic SPL. Assuming the classic program derives an address that is not
+  // the vault's account at all — it would read as an empty position and the
+  // planner would try to buy something the vault already holds.
   const tokenizedLegs = account.legs.filter((leg) => leg.mint !== ZERO_ADDRESS);
+
+  const mintOwners = new Map<string, string>();
+  if (tokenizedLegs.length > 0) {
+    const mintAccounts = await rpc
+      .getMultipleAccounts(
+        tokenizedLegs.map((leg) => leg.mint),
+        { encoding: "base64", commitment: "confirmed" },
+      )
+      .send();
+    tokenizedLegs.forEach((leg, index) => {
+      const owner = mintAccounts.value[index]?.owner;
+      if (owner) mintOwners.set(leg.mint, owner);
+    });
+  }
+
   const atas = await Promise.all(
-    tokenizedLegs.map((leg) => findAssociatedTokenPda(vaultPda, leg.mint)),
+    tokenizedLegs.map((leg) =>
+      findAssociatedTokenPda(
+        vaultPda,
+        leg.mint,
+        tokenProgramForOwner(mintOwners.get(leg.mint) ?? ""),
+      ),
+    ),
   );
 
   const holdings: LegHolding[] = [];
@@ -113,6 +143,7 @@ export async function readTrackerState(ticker: string): Promise<TrackerState | n
         mint: leg.mint,
         weightBps: leg.weightBps,
         ata,
+        tokenProgram: tokenProgramForOwner(mintOwners.get(leg.mint) ?? ""),
         amount: info ? decodeTokenAmount(decodeBase64(info.data[0])) : 0n,
         exists: Boolean(info),
       });
