@@ -60,7 +60,7 @@ pub struct Deposit<'info> {
 pub fn handle_deposit(ctx: Context<Deposit>, lamports_in: u64, min_shares_out: u64) -> Result<()> {
     require!(lamports_in > 0, VaultError::ZeroAmount);
 
-    let fee = fee_on(lamports_in, ctx.accounts.tracker.deposit_fee_bps)?;
+    let fee = fee_on(lamports_in, ctx.accounts.tracker.deposit_fee_ppm)?;
     let net = lamports_in
         .checked_sub(fee)
         .ok_or(VaultError::MathOverflow)?;

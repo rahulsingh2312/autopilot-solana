@@ -1,7 +1,14 @@
 "use client";
 
 import { SolMark } from "@/components/ui/sol-mark";
-import { BRAND, EXPLORER, LIVE_TRACKERS, PROGRAM_ID } from "@/lib/config";
+import { TokenTicker } from "@/components/ui/token-icon";
+import {
+  BRAND,
+  CLUSTER,
+  EXPLORER,
+  LIVE_TRACKERS,
+  PROGRAM_ID,
+} from "@/lib/config";
 import {
   computeNav,
   formatNav,
@@ -30,25 +37,10 @@ function VaultRow({ ticker }: { ticker: string }) {
 
   return (
     <tr className="border-t border-rule">
-      <th scope="row" className="num py-2.5 pr-3 text-left font-medium text-ink">
-        <span className="flex items-center gap-2">
-          {/* The mint's own artwork, the same file a wallet shows for this
-              token. Anything drawn here instead would be a second identity
-              for the same asset. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={`/tokens/${ticker.toLowerCase()}.png`}
-            alt=""
-            width={18}
-            height={18}
-            loading="lazy"
-            decoding="async"
-            className="h-[18px] w-[18px] shrink-0 rounded-full"
-          />
-          {ticker}
-        </span>
+      <th scope="row" className="num py-2.5 pr-2 text-left font-medium text-ink sm:pr-3">
+        <TokenTicker ticker={ticker} size={18} />
       </th>
-      <td className="py-2.5 pr-3">
+      <td className="py-2.5 pr-2 sm:pr-3">
         {snapshot ? (
           <AddressLink
             address={snapshot.vaultAddress}
@@ -58,7 +50,7 @@ function VaultRow({ ticker }: { ticker: string }) {
           <span className="text-faint">…</span>
         )}
       </td>
-      <td className="num py-2.5 pr-3 text-right tabular-nums text-ink">
+      <td className="num py-2.5 text-right tabular-nums text-ink sm:pr-3">
         {deployed && snapshot ? (
           <>
             <SolMark className="mr-1" />
@@ -70,7 +62,7 @@ function VaultRow({ ticker }: { ticker: string }) {
           "n/a"
         )}
       </td>
-      <td className="num py-2.5 text-right tabular-nums text-ink">
+      <td className="num hidden py-2.5 text-right tabular-nums text-ink sm:table-cell">
         {deployed && snapshot
           ? formatNav(computeNav(snapshot.netAssets, snapshot.supply))
           : "n/a"}
@@ -94,7 +86,7 @@ export function Proof() {
         </header>
         <div className="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-start">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[26rem] border-collapse text-sm">
+            <table className="w-full border-collapse text-[0.8125rem] sm:text-sm">
               <caption className="sr-only">
                 Deployed vaults and live balances
               </caption>
@@ -102,10 +94,14 @@ export function Proof() {
                 <tr className="text-left">
                   <th className="meta pb-2 pr-3 font-medium">Tracker</th>
                   <th className="meta pb-2 pr-3 font-medium">Vault</th>
-                  <th className="meta pb-2 pr-3 text-right font-medium">
+                  <th className="meta pb-2 text-right font-medium sm:pr-3">
                     In vault
                   </th>
-                  <th className="meta pb-2 text-right font-medium">NAV</th>
+                  {/* NAV is 1.0000 on every live vault today and it is the first
+                      thing to cut when the row will not fit a phone. */}
+                  <th className="meta hidden pb-2 text-right font-medium sm:table-cell">
+                    NAV
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -116,34 +112,63 @@ export function Proof() {
             </table>
           </div>
 
-          <dl className="card flex min-w-[16rem] flex-col gap-3 p-5 text-[0.8125rem]">
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="meta">Program</dt>
-              <dd>
-                <AddressLink
-                  address={PROGRAM_ID}
-                  label={truncateAddress(PROGRAM_ID, 5)}
-                />
-              </dd>
+          {/* Glass, like the fund panel: this is the same kind of object, a
+              pane of facts laid over the page rather than a card sitting in
+              it. Rows are separated by hairlines instead of gaps so the three
+              read as one record. */}
+          <div className="glass min-w-[17rem] overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-black/[0.07] px-5 py-3">
+              <span
+                aria-hidden
+                className="grad-flow h-1.5 w-1.5 shrink-0 rounded-full"
+              />
+              <span className="meta">Verify it yourself</span>
             </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="meta">Audit</dt>
-              <dd className="text-ink">Under audit.</dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-4">
-              <dt className="meta">Source</dt>
-              <dd>
-                <a
-                  href={BRAND.repo}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="num text-ink underline decoration-dotted underline-offset-4 transition-colors hover:text-muted"
-                >
-                  repo
-                </a>
-              </dd>
-            </div>
-          </dl>
+
+            <dl className="flex flex-col text-[0.8125rem]">
+              <div className="flex items-baseline justify-between gap-4 px-5 py-3">
+                <dt className="meta">Program</dt>
+                <dd>
+                  <AddressLink
+                    address={PROGRAM_ID}
+                    label={truncateAddress(PROGRAM_ID, 5)}
+                  />
+                </dd>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
+                <dt className="meta">Network</dt>
+                <dd className="num text-ink">
+                  {CLUSTER === "devnet" ? "Solana devnet" : "Solana mainnet"}
+                </dd>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
+                <dt className="meta">Audit</dt>
+                <dd className="flex items-center gap-1.5 text-ink">
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#e0a33a]"
+                  />
+                  Under audit
+                </dd>
+              </div>
+
+              <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
+                <dt className="meta">Source</dt>
+                <dd>
+                  <a
+                    href={BRAND.repo}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="num text-ink underline decoration-dotted underline-offset-4 transition-colors hover:text-muted"
+                  >
+                    repo
+                  </a>
+                </dd>
+              </div>
+            </dl>
+          </div>
         </div>
       </div>
     </section>

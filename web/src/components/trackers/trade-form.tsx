@@ -7,7 +7,7 @@ import type { AppClient } from "@/app/providers";
 import { EXPLORER, type TrackerConfig } from "@/lib/config";
 import {
   computeNav,
-  formatBps,
+  formatPpm,
   formatNav,
   formatShares,
   formatSol,
@@ -22,6 +22,7 @@ import {
 } from "@/lib/vault/instructions";
 import type { VaultSnapshot } from "@/lib/vault/hooks";
 import { useShareBalance, useSolBalance } from "@/lib/vault/hooks";
+import { TokenTicker } from "@/components/ui/token-icon";
 import {
   useWalletAddress,
   ConnectButton,
@@ -72,7 +73,7 @@ export function TradeForm({
     if (mode === "buy") {
       const lamportsIn = solToLamports(parsed);
       const fee =
-        (lamportsIn * BigInt(trackerAccount.depositFeeBps)) / 10_000n;
+        (lamportsIn * BigInt(trackerAccount.depositFeePpm)) / 1_000_000n;
       const net = lamportsIn - fee;
       const sharesOut =
         snapshot.supply === 0n || snapshot.netAssets === 0n
@@ -87,7 +88,7 @@ export function TradeForm({
       snapshot.supply === 0n
         ? 0n
         : (snapshot.netAssets * sharesIn) / snapshot.supply;
-    const fee = (gross * BigInt(trackerAccount.redeemFeeBps)) / 10_000n;
+    const fee = (gross * BigInt(trackerAccount.redeemFeePpm)) / 1_000_000n;
     const net = gross - fee;
     const minOut = (net * (10_000n - SLIPPAGE_BPS)) / 10_000n;
     return { lamportsIn: sharesIn, fee, net, out: net, minOut };
@@ -184,7 +185,13 @@ export function TradeForm({
 
       <label className="flex flex-col gap-1.5">
         <span className="meta">
-          {mode === "buy" ? "SOL to deposit" : `${tracker.ticker} to burn`}
+          {mode === "buy" ? (
+            "SOL to deposit"
+          ) : (
+            <>
+              <TokenTicker ticker={tracker.ticker} size={13} /> to burn
+            </>
+          )}
         </span>
         <div className="glass-inset flex items-center gap-2 px-4 focus-within:border-rule-strong">
           <input
@@ -219,46 +226,62 @@ export function TradeForm({
           </button>
         </div>
         <span className="num text-[0.6875rem] text-faint">
-          {mode === "buy"
-            ? `Wallet ${formatSol(solBalance)} SOL · NAV ${formatNav(nav)}`
-            : `You hold ${formatShares(shares)} ${tracker.ticker}`}
+          {mode === "buy" ? (
+            `Wallet ${formatSol(solBalance)} SOL · NAV ${formatNav(nav)}`
+          ) : (
+            <>
+              You hold {formatShares(shares)}{" "}
+              <TokenTicker ticker={tracker.ticker} size={13} />
+            </>
+          )}
         </span>
       </label>
 
       {quote ? (
-        <dl className="glass-inset flex flex-col gap-1.5 p-4 text-[0.8125rem]">
-          <div className="flex justify-between gap-3">
-            {/* <dt className="text-muted">
-              {mode === "buy" ? "Protocol fee" : "Redemption fee"}
-              <span className="num ml-1 text-faint">
-                (
-                {formatBps(
-                  mode === "buy"
-                    ? trackerAccount.depositFeeBps
-                    : trackerAccount.redeemFeeBps,
-                )}
-                )
-              </span>
-            </dt> */}
-            {/* <dd className="num tabular-nums text-ink">
-              {formatSol(quote.fee)} SOL
-            </dd> */}
-          </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted">You receive</dt>
-            <dd className="num tabular-nums text-ink">
-              {mode === "buy"
-                ? `${formatShares(quote.out)} ${tracker.ticker}`
-                : `${formatSol(quote.out)} SOL`}
+        <dl className="glass-inset flex flex-col gap-2 p-4 text-[0.8125rem]">
+          {/* What you get, first and largest. The fee used to head this list
+              at the same weight, which made a 0.0006 SOL charge read as the
+              headline of the trade. It stays on screen, because this is the
+              moment before signing and hiding it is what "hidden fee" means,
+              but it belongs under the number it is subtracted from. */}
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="font-medium text-ink">You receive</dt>
+            <dd className="num text-[0.9375rem] font-semibold tabular-nums text-ink">
+              {mode === "buy" ? (
+                <>
+                  {formatShares(quote.out)}{" "}
+                  <TokenTicker ticker={tracker.ticker} size={16} />
+                </>
+              ) : (
+                `${formatSol(quote.out)} SOL`
+              )}
             </dd>
           </div>
-          <div className="flex justify-between gap-3">
-            <dt className="text-muted">Minimum after slippage</dt>
-            <dd className="num tabular-nums text-faint">
-              {mode === "buy"
-                ? formatShares(quote.minOut)
-                : `${formatSol(quote.minOut)} SOL`}
-            </dd>
+
+          <div className="flex flex-col gap-1 border-t border-rule pt-2 text-[0.75rem] text-faint">
+            <div className="flex justify-between gap-3">
+              <dt>
+                {mode === "buy" ? "Protocol fee" : "Redemption fee"}
+                <span className="num ml-1">
+                  (
+                  {formatPpm(
+                    mode === "buy"
+                      ? trackerAccount.depositFeePpm
+                      : trackerAccount.redeemFeePpm,
+                  )}
+                  )
+                </span>
+              </dt>
+              <dd className="num tabular-nums">{formatSol(quote.fee)} SOL</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>Minimum after slippage</dt>
+              <dd className="num tabular-nums">
+                {mode === "buy"
+                  ? formatShares(quote.minOut)
+                  : `${formatSol(quote.minOut)} SOL`}
+              </dd>
+            </div>
           </div>
         </dl>
       ) : null}

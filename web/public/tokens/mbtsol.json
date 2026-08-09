@@ -1,7 +1,7 @@
 {
   "name": "Michael Burry Tracker",
   "symbol": "mbtSOL",
-  "description": "Michael Burry's final disclosed book, frozen at the moment he walked away. Deposit SOL to mint mbtSOL, burn it back for SOL at NAV any time. The source is final, so the basket never changes. Holdings: MOH, LULU, SLM, BRKR. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "description": "Michael Burry's final disclosed book, frozen at the moment he walked away. Deposit SOL to mint mbtSOL, burn it back for SOL at NAV any time. The source is final, so mbtSOL holdings never change. Holdings: MOH, LULU, SLM, BRKR. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/mbtsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [

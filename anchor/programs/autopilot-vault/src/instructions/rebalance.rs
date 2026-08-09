@@ -64,17 +64,17 @@ pub fn handle_set_paused(ctx: Context<AdminOnly>, paused: bool) -> Result<()> {
 /// the program.
 pub fn handle_set_fees(
     ctx: Context<AdminOnly>,
-    deposit_fee_bps: u16,
-    redeem_fee_bps: u16,
+    deposit_fee_ppm: u16,
+    redeem_fee_ppm: u16,
 ) -> Result<()> {
     require!(
-        deposit_fee_bps <= MAX_FEE_BPS && redeem_fee_bps <= MAX_FEE_BPS,
+        deposit_fee_ppm <= MAX_FEE_PPM && redeem_fee_ppm <= MAX_FEE_PPM,
         VaultError::FeeTooHigh
     );
 
     let tracker = &mut ctx.accounts.tracker;
-    tracker.deposit_fee_bps = deposit_fee_bps;
-    tracker.redeem_fee_bps = redeem_fee_bps;
+    tracker.deposit_fee_ppm = deposit_fee_ppm;
+    tracker.redeem_fee_ppm = redeem_fee_ppm;
 
     Ok(())
 }

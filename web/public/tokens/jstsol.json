@@ -1,7 +1,7 @@
 {
   "name": "Jim Simons Tracker",
   "symbol": "jstSOL",
-  "description": "The man died in 2024. The machine he built keeps filing. Deposit SOL to mint jstSOL, burn it back for SOL at NAV any time. The source is re-read every 30 minutes and the basket updates when it changes. Holdings: UTHR, PLTR, AAPL, KGC, MU. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "description": "The man died in 2024. The machine he built keeps filing. Deposit SOL to mint jstSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and jstSOL holdings update when it changes. Holdings: UTHR, PLTR, AAPL, KGC, MU. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/jstsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [

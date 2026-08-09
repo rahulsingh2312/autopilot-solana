@@ -110,8 +110,8 @@ export type TrackerAccount = {
   ticker: string;
   name: string;
   legs: OnChainLeg[];
-  depositFeeBps: number;
-  redeemFeeBps: number;
+  depositFeePpm: number;
+  redeemFeePpm: number;
   rebalanceInterval: bigint;
   lastRebalanceTs: bigint;
   rebalanceCount: number;
@@ -177,9 +177,9 @@ export function decodeTracker(data: ReadonlyUint8Array): TrackerAccount | null {
     legs.push(leg as OnChainLeg);
   }
 
-  const [depositFeeBps, o4] = u16.read(data, o);
+  const [depositFeePpm, o4] = u16.read(data, o);
   o = o4;
-  const [redeemFeeBps, o5] = u16.read(data, o);
+  const [redeemFeePpm, o5] = u16.read(data, o);
   o = o5;
   const [rebalanceInterval, o6] = i64.read(data, o);
   o = o6;
@@ -208,8 +208,8 @@ export function decodeTracker(data: ReadonlyUint8Array): TrackerAccount | null {
     ticker,
     name,
     legs,
-    depositFeeBps,
-    redeemFeeBps,
+    depositFeePpm,
+    redeemFeePpm,
     rebalanceInterval,
     lastRebalanceTs,
     rebalanceCount,

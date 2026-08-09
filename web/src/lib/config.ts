@@ -21,13 +21,13 @@ export const CHAIN = `solana:${CLUSTER}` as const;
 export const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
 
 /**
- * How often a tracker's source is re-read for changes, in minutes.
+ * How often a tracker's source is re-read for changes, in seconds.
  *
  * Stated on the fund card and again in every token's on-chain metadata. Those
  * two disagreeing would be a card and a wallet describing the same asset
  * differently, so the number lives here and both read it.
  */
-export const WATCH_MINUTES = 30;
+export const WATCH_SECONDS = 30;
 
 export const BRAND = {
   name: "Autopilot",
@@ -49,8 +49,8 @@ export const EXPLORER = (
     cluster === "devnet" ? "?cluster=devnet" : ""
   }`;
 
-/** Matches MAX_FEE_BPS in the program. The UI cannot show a fee the chain would reject. */
-export const MAX_FEE_BPS = 300;
+/** Matches MAX_FEE_PPM in the program (3%). The UI cannot show a fee the chain would reject. */
+export const MAX_FEE_PPM = 30_000;
 
 export type LegSource = "13f" | "editorial" | "disclosure";
 
@@ -105,7 +105,7 @@ export const TRACKERS: TrackerConfig[] = [
     hook: "Michael Burry's final disclosed book, frozen at the moment he walked away.",
     about: [
       "Scion Asset Management filed its final 13F on November 3, 2025 and deregistered with the SEC seven days later. Burry told investors he would liquidate and return capital by year end. There is no next filing coming.",
-      "This basket holds the last disclosed common-stock book: four names, $68.1M, exactly as reported. It will never rebalance, because there is nothing left to rebalance against. A closing snapshot of a famous career, held as a token.",
+      "mbtSOL holds the last disclosed common-stock book: four names, $68.1M, exactly as reported. It will never rebalance, because there is nothing left to rebalance against. A closing snapshot of a famous career, held as a token.",
     ],
     source: "SEC Form 13F-HR, Scion Asset Management, Q3 2025 (final)",
     sourceUrl:
@@ -148,14 +148,14 @@ export const TRACKERS: TrackerConfig[] = [
     hook: "He is still on television every weeknight. That is the whole thesis.",
     about: [
       "Six of the most-shouted-about names on cable, held as tokenized equities. An index built from a running joke, and we run it seriously: fixed weights, monthly rebalance, every move on chain.",
-      "For the record: the ETF that tried this, SJIM, closed in February 2024 after a year of losing money. The meme has a track record and it is not good. This index is editorial, not a filing.",
+      "For the record, the meme has been measured. Quiver Quantitative backtests an inverse-Cramer strategy from January 2021 at a 42.7% win rate over 3,427 trades, a Sharpe of -0.171 and -13.99% in the last year. The ETF that tried it, SJIM, closed in February 2024. This index is editorial, not a filing.",
     ],
     source: "Editorial. Curated by Autopilot from Mad Money coverage.",
     sourceUrl: "https://www.cnbc.com/mad-money/",
     rebalance: "Monthly, on the first trading day",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Autopilot picks these names. No regulator, no filing, no rule you can audit. If you want a basket somebody else is legally on the hook for, this is not it.",
+      "Autopilot picks these names. No regulator, no filing, no rule you can audit. If you want holdings somebody else is legally on the hook for, this is not it.",
     legs: [
       {
         symbol: "NVDA",
@@ -212,22 +212,25 @@ export const TRACKERS: TrackerConfig[] = [
     subject: "Nancy Pelosi",
     hook: "The most-watched brokerage account in America, filed under oath.",
     about: [
-      "Built from the periodic transaction reports her household files under the STOCK Act: Broadcom and Nvidia call exercises, Palo Alto, Tempus AI, and the long-standing mega-cap core. The January 2026 filings exercised calls into 5,000 more NVDA and 5,000 TEM shares.",
-      "Disclosures state ranges, not amounts, and options, not just shares. So the weights here are our estimate of the household book, not a number anyone filed.",
+      "Built from the periodic transaction reports her household files under the STOCK Act, weighted by the midpoint of each disclosed dollar range. The newest entries are 200 Intel calls and 200 Uber calls traded May 29, 2026 and filed June 23. Before those, January 2026 exercised fifty calls each into Amazon, Alphabet, Nvidia, Vistra and Tempus AI.",
+      "Disclosures state ranges like $1,000,001 to $5,000,000, never an exact size, so every weight here is a midpoint estimate rather than a number anyone filed.",
     ],
-    source: "STOCK Act periodic transaction reports, Speaker Emerita Pelosi",
-    sourceUrl: "https://disclosures-clerk.house.gov/FinancialDisclosure",
+    source: "STOCK Act periodic transaction reports, via Quiver Quantitative",
+    sourceUrl:
+      "https://www.quiverquant.com/congresstrading/politician/Nancy%20Pelosi-P000197",
     rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days by law",
     caveat:
-      "Filings disclose ranges like $1M to $5M, not exact sizes, and much of the book is call options a long-only vault cannot hold. These weights are editorial estimates of the disclosed positions, held as shares.",
+      "Much of this book is call options, and a long-only vault holds shares instead. Same direction, none of the leverage, so this will not track her returns. Intel alone is 48% because one disclosed range ran to $5M; that is what the filing implies, not a conviction we added.",
     legs: [
-      { symbol: "AVGO", company: "Broadcom", weightBps: 2500, tokenized: true, xstock: "AVGOx" },
-      { symbol: "NVDA", company: "NVIDIA", weightBps: 2500, tokenized: true, xstock: "NVDAx" },
-      { symbol: "PANW", company: "Palo Alto Networks", weightBps: 1500, tokenized: true, xstock: "PANWx" },
-      { symbol: "AAPL", company: "Apple", weightBps: 1250, tokenized: true, xstock: "AAPLx" },
-      { symbol: "GOOGL", company: "Alphabet", weightBps: 1250, tokenized: true, xstock: "GOOGLx" },
-      { symbol: "TEM", company: "Tempus AI", weightBps: 1000, tokenized: false },
+      { symbol: "INTC", company: "Intel", weightBps: 4800, tokenized: true, xstock: "INTCx" },
+      { symbol: "UBER", company: "Uber", weightBps: 1200, tokenized: true, xstock: "UBERx" },
+      { symbol: "AMZN", company: "Amazon", weightBps: 1200, tokenized: true, xstock: "AMZNx" },
+      { symbol: "GOOGL", company: "Alphabet", weightBps: 1200, tokenized: true, xstock: "GOOGLx" },
+      { symbol: "NVDA", company: "NVIDIA", weightBps: 600, tokenized: true, xstock: "NVDAx" },
+      { symbol: "AAPL", company: "Apple", weightBps: 600, tokenized: true, xstock: "AAPLx" },
+      { symbol: "VST", company: "Vistra", weightBps: 280, tokenized: false },
+      { symbol: "TEM", company: "Tempus AI", weightBps: 120, tokenized: false },
     ],
   },
   {
@@ -241,7 +244,7 @@ export const TRACKERS: TrackerConfig[] = [
     subject: "Congress",
     hook: "535 people who legally must tell you what they bought. Eventually.",
     about: [
-      "The five names most widely held across congressional disclosures, equal weighted. Members have 45 days to report a trade under the STOCK Act, so this basket is always looking slightly into the past.",
+      "The five names most widely held across congressional disclosures, equal weighted. Members have 45 days to report a trade under the STOCK Act, so cgSOL is always looking slightly into the past.",
       "Individual conviction washes out in an aggregate; what survives is the chamber's collective lean, which has been mega-cap tech for years.",
     ],
     source: "STOCK Act disclosures, aggregated across members",
@@ -249,7 +252,7 @@ export const TRACKERS: TrackerConfig[] = [
     rebalance: "Quarterly",
     filingDelay: "Up to 45 days by law",
     caveat:
-      "An equal-weight basket of the most commonly disclosed names, not a size-weighted aggregate: disclosure ranges make true sizing impossible. It tracks what Congress holds most widely, not what it holds most of.",
+      "An equal-weight set of the most commonly disclosed names, not a size-weighted aggregate: disclosure ranges make true sizing impossible. It tracks what Congress holds most widely, not what it holds most of.",
     legs: [
       { symbol: "NVDA", company: "NVIDIA", weightBps: 2000, tokenized: true, xstock: "NVDAx" },
       { symbol: "MSFT", company: "Microsoft", weightBps: 2000, tokenized: true, xstock: "MSFTx" },
@@ -278,7 +281,7 @@ export const TRACKERS: TrackerConfig[] = [
     rebalance: "Quarterly, on each 13F",
     filingDelay: "Up to 45 days after quarter end",
     caveat:
-      "Top six positions only, out of 29, renormalized to 100%. Berkshire's biggest asset is a mountain of T-bills no equity basket can represent, so this is the equity sleeve, concentrated further.",
+      "Top six positions only, out of 29, renormalized to 100%. Berkshire's biggest asset is a mountain of T-bills no equity tracker can represent, so this is the equity sleeve, concentrated further.",
     legs: [
       { symbol: "AAPL", company: "Apple", weightBps: 2680, tokenized: true, xstock: "AAPLx" },
       { symbol: "AXP", company: "American Express", weightBps: 2120, tokenized: false },
@@ -299,7 +302,7 @@ export const TRACKERS: TrackerConfig[] = [
     subject: "Jim Simons",
     hook: "The man died in 2024. The machine he built keeps filing.",
     about: [
-      "Renaissance Technologies still reports a 13F every quarter: $64B across thousands of algorithmically chosen positions. This basket holds the five largest from Q1 2026, renormalized.",
+      "Renaissance Technologies still reports a 13F every quarter: $64B across thousands of algorithmically chosen positions. jstSOL holds the five largest from Q1 2026, renormalized.",
       "Be clear about what this is not: Medallion, the fund that made Simons a legend, is closed to outsiders and discloses nothing. This tracks the public tip of a very private iceberg.",
     ],
     source: "SEC Form 13F-HR, Renaissance Technologies, Q1 2026",
@@ -337,7 +340,7 @@ export const TRACKERS: TrackerConfig[] = [
     rebalance: "Quarterly, on each 13F",
     filingDelay: "Up to 45 days after quarter end",
     caveat:
-      "Top five of eleven positions, renormalized. 13Fs omit swaps and hedges, and Ackman uses both, so the fund's true exposure can differ from its filing in ways this basket cannot see.",
+      "Top five of eleven positions, renormalized. 13Fs omit swaps and hedges, and Ackman uses both, so the fund's true exposure can differ from its filing in ways psqSOL cannot see.",
     legs: [
       { symbol: "BN", company: "Brookfield", weightBps: 2200, tokenized: false },
       { symbol: "AMZN", company: "Amazon", weightBps: 2150, tokenized: true, xstock: "AMZNx" },

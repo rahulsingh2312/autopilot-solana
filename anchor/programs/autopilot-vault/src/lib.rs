@@ -70,9 +70,9 @@ pub mod autopilot_vault {
 
     pub fn set_fees(
         ctx: Context<AdminOnly>,
-        deposit_fee_bps: u16,
-        redeem_fee_bps: u16,
+        deposit_fee_ppm: u16,
+        redeem_fee_ppm: u16,
     ) -> Result<()> {
-        instructions::rebalance::handle_set_fees(ctx, deposit_fee_bps, redeem_fee_bps)
+        instructions::rebalance::handle_set_fees(ctx, deposit_fee_ppm, redeem_fee_ppm)
     }
 }

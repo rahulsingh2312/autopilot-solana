@@ -260,10 +260,12 @@ body {
 /* ── Glass: the fund panel material ──────────────────────────────────── */
 
 .glass {
-  background: rgb(255 255 255 / 0.55);
-  backdrop-filter: blur(24px) saturate(1.4);
-  -webkit-backdrop-filter: blur(24px) saturate(1.4);
-  border: 1px solid rgb(255 255 255 / 0.78);
+  /* Thin enough that the aurora reads through the pane rather than behind a
+     white sheet. The blur does the legibility work, not opacity. */
+  background: rgb(255 255 255 / 0.34);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
+  border: 1px solid rgb(255 255 255 / 0.55);
   border-radius: 24px;
   box-shadow:
     0 1px 2px rgb(10 10 10 / 0.04),
@@ -271,8 +273,8 @@ body {
 }
 
 .glass-inset {
-  background: rgb(255 255 255 / 0.55);
-  border: 1px solid rgb(255 255 255 / 0.85);
+  background: rgb(255 255 255 / 0.38);
+  border: 1px solid rgb(255 255 255 / 0.6);
   border-radius: 16px;
 }
 
@@ -319,6 +321,60 @@ body {
   border-radius: 4px;
   background: rgb(10 10 10 / 0.05);
   z-index: -1;
+}
+
+/* ── The deposit-flow diagram ────────────────────────────────────────── */
+
+/* Denser starfield behind the diagram than the page's own 24px grid, masked
+   to an ellipse so it fades out instead of ending on a visible edge. */
+/* Just the edge fade now: the specks themselves are drawn on a canvas by
+   ParticleField, so this only stops the field ending on a visible rectangle. */
+.flow-dots {
+  -webkit-mask-image: radial-gradient(
+    78% 92% at 50% 50%,
+    #000 45%,
+    transparent 100%
+  );
+  mask-image: radial-gradient(78% 92% at 50% 50%, #000 45%, transparent 100%);
+}
+
+/* A bead running the wire between the two tiles. Travels, pauses at the far
+   end, then restarts, so it reads as one transaction at a time rather than a
+   conveyor belt. */
+@keyframes wire {
+  0% {
+    left: 0;
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  78% {
+    opacity: 1;
+  }
+  88%,
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+.wire-bead {
+  animation: wire 2.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+/* The token fading in when the cycle lands on the next tracker. */
+@keyframes token-swap {
+  from {
+    opacity: 0;
+    transform: scale(0.86);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.token-swap {
+  animation: token-swap 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 /* ── Motion (everything except the gradient is quiet) ────────────────── */
@@ -376,7 +432,9 @@ body {
   /* Gradient surfaces freeze mid-blend instead of animating. */
   .grad-flow,
   .grad-num,
-  .btn-grad {
+  .btn-grad,
+  .wire-bead,
+  .token-swap {
     animation: none !important;
     background-position: 50% center;
   }

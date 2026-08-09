@@ -1,3 +1,4 @@
+import { DepositFlow } from "@/components/site/deposit-flow";
 import { ISSUER } from "@/lib/config";
 
 /** The sequence is the information: this is the order things happen in. */
@@ -23,7 +24,7 @@ const FINE_PRINT = [
   },
   {
     title: "Rebalancing",
-    body: "Only the tracker authority can publish a new basket, and every change emits an on-chain event with a counter and timestamp. The card shows when weights last changed.",
+    body: "Only the tracker authority can publish new holdings, and every change emits an on-chain event with a counter and timestamp. The card shows when weights last changed.",
   },
   {
     title: "The tokenized-stock layer",
@@ -48,6 +49,10 @@ export function HowItWorks() {
             Three steps, <em>no fine print hidden.</em>
           </h2>
         </header>
+
+        <div className="mb-12">
+          <DepositFlow />
+        </div>
 
         <ol className="grid gap-0 border-l border-rule">
           {STEPS.map(([title, body], i) => (

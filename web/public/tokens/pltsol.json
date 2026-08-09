@@ -1,7 +1,7 @@
 {
   "name": "Pelosi Tracker",
   "symbol": "pltSOL",
-  "description": "The most-watched brokerage account in America, filed under oath. Deposit SOL to mint pltSOL, burn it back for SOL at NAV any time. The source is re-read every 30 minutes and the basket updates when it changes. Holdings: AVGO, NVDA, PANW, AAPL, GOOGL, TEM. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "description": "The most-watched brokerage account in America, filed under oath. Deposit SOL to mint pltSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and pltSOL holdings update when it changes. Holdings: INTC, UBER, AMZN, GOOGL, NVDA, AAPL, VST, TEM. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/pltsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
@@ -11,7 +11,7 @@
     },
     {
       "trait_type": "Source",
-      "value": "STOCK Act periodic transaction reports, Speaker Emerita Pelosi"
+      "value": "STOCK Act periodic transaction reports, via Quiver Quantitative"
     },
     {
       "trait_type": "Rebalance",
@@ -23,7 +23,7 @@
     },
     {
       "trait_type": "Holdings",
-      "value": "6"
+      "value": "8"
     },
     {
       "trait_type": "Network",

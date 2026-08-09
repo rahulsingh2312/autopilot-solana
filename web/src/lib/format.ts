@@ -33,8 +33,15 @@ export const formatUsd = (value: number) => usdFmt.format(value);
 /** NAV per token, always four places so the column never changes width. */
 export const formatNav = (nav: number) => navFmt.format(nav);
 
-export const formatBps = (bps: number) =>
-  `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 2)}%`;
+/**
+ * Fees are parts per million on chain, so one unit is 0.0001%. Trailing zeros
+ * are trimmed: 10 ppm reads "0.001%", not "0.0010%".
+ */
+export const formatPpm = (ppm: number) => {
+  if (ppm === 0) return "0%";
+  const pct = ppm / 10_000;
+  return `${pct.toFixed(4).replace(/\.?0+$/, "")}%`;
+};
 
 export const formatWeight = (bps: number) => `${(bps / 100).toFixed(2)}%`;
 

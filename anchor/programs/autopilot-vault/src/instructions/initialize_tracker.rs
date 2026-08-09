@@ -12,8 +12,8 @@ pub struct InitializeTrackerArgs {
     pub ticker: String,
     pub name: String,
     pub legs: Vec<BasketLeg>,
-    pub deposit_fee_bps: u16,
-    pub redeem_fee_bps: u16,
+    pub deposit_fee_ppm: u16,
+    pub redeem_fee_ppm: u16,
     pub rebalance_interval: i64,
     pub filing_delay_days: u16,
 }
@@ -76,7 +76,7 @@ pub fn handle_initialize_tracker(
         VaultError::InvalidName
     );
     require!(
-        args.deposit_fee_bps <= MAX_FEE_BPS && args.redeem_fee_bps <= MAX_FEE_BPS,
+        args.deposit_fee_ppm <= MAX_FEE_PPM && args.redeem_fee_ppm <= MAX_FEE_PPM,
         VaultError::FeeTooHigh
     );
     validate_legs(&args.legs)?;
@@ -104,8 +104,8 @@ pub fn handle_initialize_tracker(
     tracker.ticker = args.ticker.clone();
     tracker.name = args.name;
     tracker.legs = args.legs;
-    tracker.deposit_fee_bps = args.deposit_fee_bps;
-    tracker.redeem_fee_bps = args.redeem_fee_bps;
+    tracker.deposit_fee_ppm = args.deposit_fee_ppm;
+    tracker.redeem_fee_ppm = args.redeem_fee_ppm;
     tracker.rebalance_interval = args.rebalance_interval;
     tracker.last_rebalance_ts = now;
     tracker.rebalance_count = 0;

@@ -69,7 +69,7 @@ pub fn handle_redeem_for_sol(
     let gross = mul_div(assets_before, shares_in, supply_before)?;
     require!(gross > 0, VaultError::RedemptionTooSmall);
 
-    let fee = fee_on(gross, ctx.accounts.tracker.redeem_fee_bps)?;
+    let fee = fee_on(gross, ctx.accounts.tracker.redeem_fee_ppm)?;
     let net = gross.checked_sub(fee).ok_or(VaultError::MathOverflow)?;
     require!(net > 0, VaultError::RedemptionTooSmall);
     require!(net >= min_lamports_out, VaultError::SlippageExceeded);

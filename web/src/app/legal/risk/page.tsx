@@ -40,7 +40,7 @@ export default function RiskPage() {
         {
           heading: "The strategy may be stale, wrong, or dead",
           body: [
-            "Trackers built on regulatory filings inherit the filing's delay. A 13F can be up to 45 days old, so the basket describes a portfolio the manager may have already exited.",
+            "Trackers built on regulatory filings inherit the filing's delay. A 13F can be up to 45 days old, so the holdings describe a portfolio the manager may have already exited.",
             "A source can stop entirely. The Michael Burry Tracker follows a fund that deregistered with the SEC in November 2025 and filed nothing after. That tracker is frozen by design and will never update. It describes a portfolio that no longer exists.",
             "Editorial trackers are our own selections. There is no filing behind them and no rule you can audit. The exchange-traded fund that attempted an inverse-Cramer strategy closed in February 2024 after losing money.",
           ],

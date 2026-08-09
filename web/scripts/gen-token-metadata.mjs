@@ -17,7 +17,7 @@ import { writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const { TRACKERS, BRAND, CLUSTER, WATCH_MINUTES } = await import(
+const { TRACKERS, BRAND, CLUSTER, WATCH_SECONDS } = await import(
   "../src/lib/config.ts"
 );
 
@@ -34,8 +34,8 @@ const network = CLUSTER === "devnet" ? "Solana devnet" : "Solana mainnet";
 function describe(tracker) {
   const watch =
     tracker.status === "frozen"
-      ? "The source is final, so the basket never changes."
-      : `The source is re-read every ${WATCH_MINUTES} minutes and the basket updates when it changes.`;
+      ? `The source is final, so ${tracker.ticker} holdings never change.`
+      : `The source is re-read every ${WATCH_SECONDS} seconds and ${tracker.ticker} holdings update when it changes.`;
 
   return [
     `${tracker.hook} Deposit SOL to mint ${tracker.ticker}, burn it back for SOL at NAV any time.`,

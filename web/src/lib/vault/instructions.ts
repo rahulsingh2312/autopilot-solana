@@ -76,9 +76,9 @@ export function getRedeemForSolInstruction(params: RedeemParams): Instruction {
  */
 const PROGRAM_ERRORS: Record<number, string> = {
   6000: "Enter an amount above zero.",
-  6001: "That basket does not add up to 100%.",
-  6002: "That basket has too many positions.",
-  6003: "That basket is empty.",
+  6001: "Those holdings do not add up to 100%.",
+  6002: "That tracker has too many positions.",
+  6003: "That tracker has no holdings.",
   6004: "That ticker is not valid.",
   6005: "That name is not valid.",
   6006: "That symbol is not valid.",
@@ -90,7 +90,7 @@ const PROGRAM_ERRORS: Record<number, string> = {
   6012: "That redemption rounds down to zero. Try a larger amount.",
   6013: "The numbers overflowed. Try a smaller amount.",
   6014: "The vault cannot go below its rent reserve.",
-  6015: "The tokenized positions passed in did not match the basket.",
+  6015: "The tokenized positions passed in did not match the tracker's holdings.",
   6016: "A token account did not match the expected mint.",
   6017: "A token account is not owned by the expected wallet.",
   6018: "The price moved past your limit before this landed. Nothing was spent.",

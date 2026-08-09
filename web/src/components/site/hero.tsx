@@ -3,21 +3,23 @@
 import { useEffect, useRef, useState } from "react";
 
 import { CountUp } from "@/components/ui/count-up";
+import { DepositFlow } from "@/components/site/deposit-flow";
 import { NavFootnote, NavStar } from "@/components/ui/nav-note";
 import { Halftone } from "@/components/ui/halftone";
 import { SolMark } from "@/components/ui/sol-mark";
+import { TokenTicker } from "@/components/ui/token-icon";
 import { TradeForm } from "@/components/trackers/trade-form";
 import { TokenMark, useXstocks } from "@/components/trackers/token-mark";
 import { useTrackerSelection } from "@/components/trackers/selection";
 import {
   EXPLORER,
   TRACKERS,
-  WATCH_MINUTES,
+  WATCH_SECONDS,
   type TrackerConfig,
 } from "@/lib/config";
 import {
   computeNav,
-  formatBps,
+  formatPpm,
   formatNav,
   formatWeight,
   lamportsToSolNumber,
@@ -51,7 +53,7 @@ function LiveLine({ ticker }: { ticker: string }) {
   return (
     <p className="num flex flex-wrap items-baseline gap-x-5 gap-y-1 text-sm text-muted">
       <span>
-        {snapshot.ticker} vault{" "}
+        <TokenTicker ticker={snapshot.ticker} size={15} /> vault{" "}
         <span className="grad-num text-lg font-semibold">
           <SolMark className="mr-0.5" />
           <CountUp value={tvl} format={(v) => v.toFixed(3)} />
@@ -114,6 +116,16 @@ function PortraitCycle({
 /** Holdings shown before the list asks to be opened. */
 const VISIBLE_LEGS = 3;
 
+/** First letter only. Whole-string lowercasing would eat "Nov 3, 2025". */
+const uncapitalize = (text: string) =>
+  text.charAt(0).toLowerCase() + text.slice(1);
+
+/** Drop a trailing period so an interpolated value can continue a sentence. */
+const strip = (text: string) => text.replace(/\.\s*$/, "");
+
+/** Guarantee exactly one closing period, never two. */
+const sentence = (text: string) => `${strip(text)}.`;
+
 /**
  * The tracking strip under the card and the portrait. This is the part of a
  * basket that is about time rather than about price: how often we go back to
@@ -126,42 +138,65 @@ function TrackingStrip({ tracker }: { tracker: TrackerConfig }) {
   const { snapshot } = useVault(tracker.ticker);
   const deployed = Boolean(snapshot?.tracker);
 
+  const holdings = `${tracker.ticker} holdings`;
+  // "None. There is no filing." is a real value here, and reading it as a
+  // duration produced "already behind: none. There is no filing..".
+  const sourceLags = !/^none\b/i.test(tracker.filingDelay);
+
   const cells = [
     {
       label: "Source check",
-      value: frozen
-        ? "Stopped. There is no next filing."
-        : `Every ${WATCH_MINUTES} minutes`,
+      value: frozen ? "Stopped" : `Every ${WATCH_SECONDS} seconds`,
       note: frozen
-        ? "The filer deregistered, so nothing new can arrive."
-        : `We re-read the source every ${WATCH_MINUTES} minutes and update the basket when it changes.`,
+        ? "The filer deregistered. There is no next filing to read."
+        : `We re-read the source every ${WATCH_SECONDS} seconds. If it changed, ${holdings} change with it.`,
     },
     {
-      label: "Rebalance",
+      label: "Source publishes",
       value: tracker.rebalance,
-      note: "Weights move only when the source does. Every change is a transaction you can read on chain.",
+      note: frozen
+        ? `${holdings} are fixed at the final filing and will not move again.`
+        : `That is the cadence the filer reports on. ${holdings} do not move in between, and each move is one transaction you can look up.`,
     },
     {
-      label: "Filing delay",
-      value: tracker.filingDelay,
-      note: "How stale this basket can be against its source, at worst.",
+      // Two different delays used to be conflated here. This one is ours: the
+      // gap between the source publishing and the holdings changing, which the
+      // watcher closes. The source's own lag is a fact about the filer, it is
+      // written into the tracker account on chain as filingDelayDays, and it
+      // stays stated rather than rounded away.
+      label: "Our delay",
+      value: "None",
+      note: frozen
+        ? `${holdings} match the final filing exactly. That filing is ${sentence(tracker.filingDelay)}`
+        : sourceLags
+          ? `${holdings} match the source as soon as it publishes. The source itself is already behind by ${uncapitalize(strip(tracker.filingDelay))}, and that lag is the filer's rather than ours.`
+          : `${holdings} match the source as soon as it publishes, and there is no filing window to wait out.`,
     },
     {
       label: "In vault",
-      value: deployed ? `${lamportsToSolNumber(snapshot!.netAssets).toFixed(3)} SOL` : "Not deployed",
+      value: deployed
+        ? `${lamportsToSolNumber(snapshot!.netAssets).toFixed(3)} SOL`
+        : "Not deployed",
       note:
         deployed && snapshot?.tracker
-          ? `Deposit fee ${formatBps(snapshot.tracker.depositFeeBps)}. Read from devnet while you look at it.`
+          ? `Deposit fee ${formatPpm(snapshot.tracker.depositFeePpm)}. Read from devnet while you look at it.`
           : "This vault is not live on devnet yet.",
     },
   ];
 
   return (
     <div className="mx-auto max-w-6xl px-4 pb-12 sm:px-6 lg:pb-16">
-      <div className="flex flex-col gap-4 border-t border-rule pt-6">
+      {/* The trade in one picture before the mechanics of it in four cells.
+          Pinned to this fund, so the right-hand tile is this token rather
+          than a carousel of ones the reader did not choose. */}
+      <div className="border-t border-rule pb-2 pt-8">
+        <DepositFlow pinned={tracker.ticker} />
+      </div>
+
+      <div className="flex flex-col gap-5 border-t border-rule pt-8">
         <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2">
           <h2 className="display text-[clamp(1.5rem,3vw,2rem)] text-ink">
-            How this basket stays current
+            How {tracker.ticker} stays current
           </h2>
           <a
             href={tracker.sourceUrl}
@@ -173,13 +208,22 @@ function TrackingStrip({ tracker }: { tracker: TrackerConfig }) {
           </a>
         </div>
 
+        {/* On a phone these stack into one column, and a label line plus a
+            value line plus a note line each was four tall blocks of nothing.
+            Below sm the label and value share a row, so a cell costs two
+            lines instead of three and the whole strip fits a thumb-scroll. */}
         <dl className="grid gap-px overflow-hidden rounded-2xl border border-rule bg-rule sm:grid-cols-2 lg:grid-cols-4">
           {cells.map((cell) => (
-            <div key={cell.label} className="flex flex-col gap-1.5 bg-bg p-4">
-              <dt className="meta">{cell.label}</dt>
-              <dd className="text-[0.9375rem] font-semibold leading-snug text-ink">
-                {cell.value}
-              </dd>
+            <div
+              key={cell.label}
+              className="flex flex-col gap-2 bg-bg p-5 sm:gap-2.5"
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:block">
+                <dt className="meta">{cell.label}</dt>
+                <dd className="text-[0.9375rem] font-semibold leading-snug text-ink sm:mt-2">
+                  {cell.value}
+                </dd>
+              </div>
               <dd className="text-[0.8125rem] leading-relaxed text-muted">
                 {cell.note}
               </dd>
@@ -227,7 +271,7 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
             {tracker.name}
           </h1>
           <p className="num text-[0.8125rem] text-faint">
-            {tracker.ticker}
+            <TokenTicker ticker={tracker.ticker} size={15} />
             {deployed ? (
               <>
                 {` · NAV `}

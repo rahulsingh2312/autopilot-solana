@@ -70,8 +70,8 @@ pub fn handle_redeem_in_kind<'info>(
     let supply_before = ctx.accounts.share_mint.supply;
     require!(supply_before > 0, VaultError::NoSharesOutstanding);
 
-    let keep_bps = BPS_DENOMINATOR
-        .checked_sub(u64::from(ctx.accounts.tracker.redeem_fee_bps))
+    let keep_ppm = FEE_DENOMINATOR
+        .checked_sub(u64::from(ctx.accounts.tracker.redeem_fee_ppm))
         .ok_or(VaultError::MathOverflow)?;
 
     let tokenized: Vec<usize> = ctx
@@ -131,7 +131,7 @@ pub fn handle_redeem_in_kind<'info>(
         let pro_rata = mul_div(vault_ta.amount, shares_in, supply_before)?;
         deliveries.push(Delivery {
             mint_index: slot * 3,
-            amount: mul_div(pro_rata, keep_bps, BPS_DENOMINATOR)?,
+            amount: mul_div(pro_rata, keep_ppm, FEE_DENOMINATOR)?,
             decimals: mint_state.decimals,
         });
     }
@@ -139,7 +139,7 @@ pub fn handle_redeem_in_kind<'info>(
     let vault_lamports = ctx.accounts.vault.lamports();
     let assets_before = ctx.accounts.tracker.net_assets(vault_lamports);
     let sol_gross = mul_div(assets_before, shares_in, supply_before)?;
-    let sol_out = mul_div(sol_gross, keep_bps, BPS_DENOMINATOR)?;
+    let sol_out = mul_div(sol_gross, keep_ppm, FEE_DENOMINATOR)?;
 
     require!(
         deliveries.iter().any(|d| d.amount > 0) || sol_out > 0,

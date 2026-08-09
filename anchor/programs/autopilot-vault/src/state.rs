@@ -39,8 +39,10 @@ pub struct Tracker {
     pub name: String,
     #[max_len(MAX_LEGS)]
     pub legs: Vec<BasketLeg>,
-    pub deposit_fee_bps: u16,
-    pub redeem_fee_bps: u16,
+    /// Parts per million. Same width as before, so the byte layout of every
+    /// existing Tracker account is untouched.
+    pub deposit_fee_ppm: u16,
+    pub redeem_fee_ppm: u16,
     /// Target seconds between rebalances. Advisory: the program records
     /// cadence so the UI can state it, it does not enforce a schedule.
     pub rebalance_interval: i64,
@@ -88,7 +90,7 @@ pub fn validate_legs(legs: &[BasketLeg]) -> Result<()> {
             .ok_or(VaultError::MathOverflow)?;
     }
     require!(
-        total == BPS_DENOMINATOR as u32,
+        total == WEIGHT_DENOMINATOR,
         VaultError::WeightsNotOneHundredPercent
     );
     Ok(())
@@ -106,6 +108,6 @@ pub fn mul_div(value: u64, numerator: u64, denominator: u64) -> Result<u64> {
     u64::try_from(result).map_err(|_| VaultError::MathOverflow.into())
 }
 
-pub fn fee_on(amount: u64, bps: u16) -> Result<u64> {
-    mul_div(amount, u64::from(bps), BPS_DENOMINATOR)
+pub fn fee_on(amount: u64, ppm: u16) -> Result<u64> {
+    mul_div(amount, u64::from(ppm), FEE_DENOMINATOR)
 }
