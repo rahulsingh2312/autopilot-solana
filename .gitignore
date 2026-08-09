@@ -10,3 +10,8 @@ anchor/.surfpool/
 
 # Screen recordings dropped in for reference, not source.
 *.mov
+
+# Worker state: an audit trail, but a local one
+backend/data/
+backend/node_modules/
+backend/.env

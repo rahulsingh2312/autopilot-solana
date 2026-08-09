@@ -9,9 +9,17 @@ edition = "2021"
 rust-version = "1.89.0"
 
 [profile.release]
+# Kept on deliberately: this program does u64 money arithmetic, and a silent
+# wrap would be worse than any size or compute cost it saves.
 overflow-checks = true
 lto = "fat"
 codegen-units = 1
+# Optimize for size. Adding the Pyth receiver SDK for oracle NAV took the
+# binary past the 350,000 bytes already allocated on chain, and growing that
+# allocation costs both an `extend` and a proportionally larger deploy buffer.
+opt-level = "z"
+strip = true
+panic = "abort"
 [profile.release.build-override]
 opt-level = 3
 incremental = false

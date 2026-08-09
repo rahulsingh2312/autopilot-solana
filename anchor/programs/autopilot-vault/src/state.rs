@@ -60,10 +60,50 @@ pub struct Tracker {
     pub mint_bump: u8,
 }
 
+/// Everything needed to price one tokenized leg, kept beside the tracker
+/// rather than inside it.
+///
+/// A separate PDA on purpose. Putting these fields on `BasketLeg` would change
+/// the `Tracker` layout and force migrating every account already deployed,
+/// for data that changes on a completely different schedule: weights move when
+/// a filing lands, the rebasing multiplier moves when a corporate action
+/// settles, and the feed id essentially never moves at all.
+#[account]
+#[derive(InitSpace, Debug)]
+pub struct LegOracle {
+    pub tracker: Pubkey,
+    /// The xStocks SPL mint this record prices.
+    pub mint: Pubkey,
+    /// Pyth price feed id for the *underlying equity*, not for the token.
+    pub feed_id: [u8; 32],
+    /// The xStocks rebasing multiplier, scaled by 1e6. An xStock's claim is
+    /// `balance × multiplier` shares, so this is not cosmetic.
+    pub multiplier_micros: u64,
+    /// Decimals of the token mint, recorded here so valuation never needs the
+    /// mint account passed alongside everything else.
+    pub decimals: u8,
+    /// When the multiplier was last pushed. Deliberately not enforced during
+    /// valuation: a multiplier is a corporate-action fact that stays true
+    /// until the next action, unlike a price.
+    pub updated_at: i64,
+    pub bump: u8,
+}
+
 impl Tracker {
     /// Lamports in the vault that actually belong to share holders.
+    ///
+    /// Counts the SOL sleeve only. Once a vault holds tokenized equities the
+    /// caller must add `oracle::value_tokenized_legs`, which is why deposit
+    /// and redemption take that path rather than calling this directly.
     pub fn net_assets(&self, vault_lamports: u64) -> u64 {
         vault_lamports.saturating_sub(self.rent_reserve)
+    }
+
+    /// Total value backing the shares: the SOL sleeve plus every priced leg.
+    pub fn total_net_assets(&self, vault_lamports: u64, leg_value: u64) -> Result<u64> {
+        self.net_assets(vault_lamports)
+            .checked_add(leg_value)
+            .ok_or(VaultError::MathOverflow.into())
     }
 
     pub fn signer_seeds(&self) -> [&[u8]; 3] {

@@ -13,6 +13,11 @@ pub const VAULT_SEED: &[u8] = b"vault";
 #[constant]
 pub const SHARE_SEED: &[u8] = b"share";
 
+/// Seed for a leg's valuation record: feed id, decimals, rebasing multiplier.
+/// Namespaced by (tracker, mint) so one program serves every tracker's legs.
+#[constant]
+pub const LEG_ORACLE_SEED: &[u8] = b"leg_oracle";
+
 /// Share tokens use the same precision as SOL, so NAV per token reads as a
 /// plain ratio near 1.0 instead of a scaled integer.
 pub const SHARE_DECIMALS: u8 = 9;

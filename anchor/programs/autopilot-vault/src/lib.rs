@@ -9,12 +9,14 @@ pub mod constants;
 pub mod error;
 pub mod events;
 pub mod instructions;
+pub mod oracle;
 pub mod state;
 
 use anchor_lang::prelude::*;
 
 pub use constants::*;
 pub use error::*;
+pub use oracle::*;
 pub use events::*;
 pub use instructions::*;
 pub use state::*;
@@ -32,12 +34,16 @@ pub mod autopilot_vault {
         instructions::initialize_tracker::handle_initialize_tracker(ctx, args)
     }
 
-    pub fn deposit(ctx: Context<Deposit>, lamports_in: u64, min_shares_out: u64) -> Result<()> {
+    pub fn deposit<'info>(
+        ctx: Context<'info, Deposit<'info>>,
+        lamports_in: u64,
+        min_shares_out: u64,
+    ) -> Result<()> {
         instructions::deposit::handle_deposit(ctx, lamports_in, min_shares_out)
     }
 
-    pub fn redeem_for_sol(
-        ctx: Context<RedeemForSol>,
+    pub fn redeem_for_sol<'info>(
+        ctx: Context<'info, RedeemForSol<'info>>,
         shares_in: u64,
         min_lamports_out: u64,
     ) -> Result<()> {
@@ -74,5 +80,39 @@ pub mod autopilot_vault {
         redeem_fee_ppm: u16,
     ) -> Result<()> {
         instructions::rebalance::handle_set_fees(ctx, deposit_fee_ppm, redeem_fee_ppm)
+    }
+
+    /// Route one leg through Jupiter, signed by the vault PDA.
+    ///
+    /// This is what turns `rebalance` from a published intention into a change
+    /// in what the vault actually holds. Custody is never broken: the assets
+    /// move from one vault-owned token account to another inside a single
+    /// transaction, and the program checks what was spent and received rather
+    /// than trusting the route.
+    pub fn swap_leg<'info>(
+        ctx: Context<'info, SwapLeg<'info>>,
+        amount_in: u64,
+        min_amount_out: u64,
+        route_data: Vec<u8>,
+    ) -> Result<()> {
+        instructions::swap_leg::handle_swap_leg(ctx, amount_in, min_amount_out, route_data)
+    }
+
+    /// Publish the price feed and rebasing multiplier for one tokenized leg.
+    ///
+    /// Required before a vault holding that leg can price a deposit: Pyth
+    /// carries the equity's price, but nothing on chain carries the multiplier
+    /// that turns a token balance into a share count.
+    pub fn push_multiplier(
+        ctx: Context<PushMultiplier>,
+        feed_id: [u8; 32],
+        multiplier_micros: u64,
+    ) -> Result<()> {
+        instructions::push_multiplier::handle_push_multiplier(ctx, feed_id, multiplier_micros)
+    }
+
+    /// Retire a tracker. Refuses while any share is outstanding.
+    pub fn close_tracker(ctx: Context<CloseTracker>) -> Result<()> {
+        instructions::close_tracker::handle_close_tracker(ctx)
     }
 }

@@ -6,6 +6,7 @@ import { Disclosure, Footer } from "@/components/site/footer";
 import { TrackerRow } from "@/components/trackers/tracker-row";
 import { TrackerSelectionProvider } from "@/components/trackers/selection";
 import { TRACKERS } from "@/lib/config";
+import { loadReturnsPayload } from "@/lib/returns-server";
 
 export function SectionHead({
   title,
@@ -28,7 +29,35 @@ export function SectionHead({
   );
 }
 
-export default function Home() {
+/**
+ * Funds ordered by trailing-year backtest, best first.
+ *
+ * Ranked on the server rather than in the browser so the grid does not
+ * reshuffle under the reader a second after it paints. A fund whose basket
+ * cannot be priced keeps its config order at the back rather than being
+ * dropped — an unmeasurable basket is still a real vault.
+ */
+async function rankedTrackers() {
+  const { trackers } = await loadReturnsPayload();
+  const oneYear = new Map(
+    trackers.map((entry) => [
+      entry.ticker,
+      entry.windows.find((w) => w.label === "1Y")?.value ?? null,
+    ]),
+  );
+
+  return [...TRACKERS].sort((a, b) => {
+    const left = oneYear.get(a.ticker);
+    const right = oneYear.get(b.ticker);
+    if (left === null || left === undefined) return 1;
+    if (right === null || right === undefined) return -1;
+    return right - left;
+  });
+}
+
+export default async function Home() {
+  const trackers = await rankedTrackers();
+
   return (
     <>
       <Header />
@@ -44,10 +73,10 @@ export default function Home() {
                   Famous portfolios, <em>one token each.</em>
                 </>
               }
-              blurb="Every vault below is live on Solana devnet, and every number on it is read from the chain while you look at it."
+              blurb="Ordered by how the basket would have done over the last year. Every vault is live on Solana devnet, and every number on it is read from the chain while you look at it."
             />
             <ul className="grid gap-4 sm:grid-cols-2">
-              {TRACKERS.map((tracker, i) => (
+              {trackers.map((tracker, i) => (
                 <TrackerRow key={tracker.ticker} tracker={tracker} index={i} />
               ))}
             </ul>

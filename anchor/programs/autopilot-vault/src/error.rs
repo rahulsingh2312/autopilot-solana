@@ -40,4 +40,28 @@ pub enum VaultError {
     TokenAccountOwnerMismatch,
     #[msg("Quote is worse than the caller's stated minimum")]
     SlippageExceeded,
+    #[msg("Swap must be routed through the pinned Jupiter program")]
+    UnexpectedSwapProgram,
+    #[msg("Route data is empty")]
+    EmptyRoute,
+    #[msg("Source and destination mint are the same")]
+    SwapToSameMint,
+    #[msg("Destination mint is not a leg of the published basket")]
+    MintNotInBasket,
+    #[msg("Swap spent more than the caller offered")]
+    SwapSpentTooMuch,
+    #[msg("Swap increased the source balance")]
+    SwapIncreasedSourceBalance,
+    #[msg("Shares are still outstanding; holders must redeem before closing")]
+    SharesStillOutstanding,
+    #[msg("Tokenized legs must be sold to SOL before closing")]
+    TokenizedLegsRemain,
+    #[msg("Oracle reported a non-positive price")]
+    InvalidOraclePrice,
+    #[msg("Leg oracle does not match the leg it was passed for")]
+    OracleMintMismatch,
+    #[msg("Rebasing multiplier is outside the plausible range")]
+    MultiplierOutOfRange,
+    #[msg("Price feed id is empty")]
+    InvalidFeedId,
 }

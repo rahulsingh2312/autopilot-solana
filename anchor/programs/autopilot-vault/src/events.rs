@@ -52,3 +52,41 @@ pub struct PausedSet {
     pub tracker: Pubkey,
     pub paused: bool,
 }
+
+/// One leg moved toward its published weight.
+///
+/// `amount_in` is what the swap actually spent, not what it was offered, so a
+/// route that used less than its allowance is visible as such. Together these
+/// events are the audit trail behind the claim that holdings follow the
+/// published basket.
+#[event]
+pub struct LegSwapped {
+    pub tracker: Pubkey,
+    pub source_mint: Pubkey,
+    pub destination_mint: Pubkey,
+    pub amount_in: u64,
+    pub amount_out: u64,
+    pub timestamp: i64,
+}
+
+#[event]
+pub struct TrackerClosed {
+    pub tracker: Pubkey,
+    pub ticker: String,
+    pub lamports_returned: u64,
+    pub timestamp: i64,
+}
+
+/// A leg's rebasing multiplier changed.
+///
+/// Emitted on every push, including a no-op re-push, so the multiplier's whole
+/// history is reconstructable from logs. It is the one trusted input in the
+/// valuation path, which makes its audit trail load-bearing.
+#[event]
+pub struct MultiplierPushed {
+    pub tracker: Pubkey,
+    pub mint: Pubkey,
+    pub previous_multiplier_micros: u64,
+    pub multiplier_micros: u64,
+    pub timestamp: i64,
+}

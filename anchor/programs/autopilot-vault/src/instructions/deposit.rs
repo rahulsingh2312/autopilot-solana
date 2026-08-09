@@ -57,7 +57,11 @@ pub struct Deposit<'info> {
 /// `min_shares_out` is the caller's slippage floor. NAV can move between the
 /// quote the user saw and the slot this lands in, so the number they approved
 /// is enforced on chain rather than trusted from the UI.
-pub fn handle_deposit(ctx: Context<Deposit>, lamports_in: u64, min_shares_out: u64) -> Result<()> {
+pub fn handle_deposit<'info>(
+    ctx: Context<'info, Deposit<'info>>,
+    lamports_in: u64,
+    min_shares_out: u64,
+) -> Result<()> {
     require!(lamports_in > 0, VaultError::ZeroAmount);
 
     let fee = fee_on(lamports_in, ctx.accounts.tracker.deposit_fee_ppm)?;
@@ -67,11 +71,23 @@ pub fn handle_deposit(ctx: Context<Deposit>, lamports_in: u64, min_shares_out: u
     require!(net > 0, VaultError::ZeroAmount);
 
     // Price against the vault as it stands *before* this deposit lands.
+    //
+    // Net assets are the SOL sleeve plus every tokenized leg valued through
+    // Pyth. Counting lamports alone — which is all this did before the vault
+    // could hold equities — would price a token-heavy vault at a fraction of
+    // its worth and mint the depositor a correspondingly huge number of
+    // shares, diluting everyone already in it.
     let supply_before = ctx.accounts.share_mint.supply;
+    let leg_value = crate::oracle::value_tokenized_legs(
+        &ctx.accounts.tracker,
+        &ctx.accounts.tracker.key(),
+        &ctx.accounts.vault.key(),
+        ctx.remaining_accounts,
+    )?;
     let assets_before = ctx
         .accounts
         .tracker
-        .net_assets(ctx.accounts.vault.lamports());
+        .total_net_assets(ctx.accounts.vault.lamports(), leg_value)?;
 
     let shares_out = if supply_before == 0 {
         // Genesis: one share per lamport, so NAV per token starts at exactly

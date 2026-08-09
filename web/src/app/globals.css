@@ -395,6 +395,163 @@ body {
   animation-delay: var(--delay, 0ms);
 }
 
+/* ── Cold open ───────────────────────────────────────────────────────────
+   Hidden until the layout's blocking script raises the flag, which it does on
+   every load unless reduced motion is asked for. Gating in CSS rather than in
+   the markup means no JS, no flag, no splash — the site is the fallback. */
+
+.intro {
+  display: none;
+}
+/* The primary button's mother-of-pearl, scaled up to fill the screen — the
+   cold open is the one place the site can wear its own gradient at full size
+   before settling back into ink on paper. Dots stay pinned while the sheen
+   travels, so only one thing moves. */
+html[data-intro] .intro {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 1.75rem;
+  cursor: pointer;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgb(10 10 10 / 0.08) 1px, transparent 0),
+    linear-gradient(
+      100deg,
+      #b6f2d8 0%,
+      #cfe6fb 17%,
+      #ded0fa 34%,
+      #f8cfe9 50%,
+      #ded0fa 66%,
+      #cfe6fb 83%,
+      #b6f2d8 100%
+    );
+  background-size:
+    24px 24px,
+    200% auto;
+  animation: intro-flow 9s linear infinite;
+  transition:
+    opacity 0.65s ease,
+    transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Per-layer positions: the shared `flow` keyframe would drag the dot grid
+   along with the sheen. */
+@keyframes intro-flow {
+  from {
+    background-position:
+      0 0,
+      0% center;
+  }
+  to {
+    background-position:
+      0 0,
+      200% center;
+  }
+}
+
+/* Nothing slides away — the colour dissolves and the card settles, so the
+   hero reads as rising through the wash rather than replacing a screen. */
+html[data-intro] .intro[data-leaving="true"] {
+  opacity: 0;
+  transform: scale(1.04);
+  pointer-events: none;
+}
+
+/* The clip is a 720px square, so it is shown at its own aspect ratio and near
+   its own resolution instead of stretched full-bleed and upscaled soft. The
+   poster rides underneath as a background: display:none keeps it off the wire
+   for anyone who won't see the card, and it covers the beat before the video
+   element mounts. */
+.intro-card {
+  width: min(78vmin, 30rem);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--ink) url("/intro-poster.jpg") center / cover no-repeat;
+  /* White hairline, not the paper rule: a warm grey edge reads as dirt once
+     the ground behind it is coloured. */
+  border: 1px solid rgb(255 255 255 / 0.6);
+  box-shadow:
+    0 1px 2px rgb(10 10 10 / 0.04),
+    0 40px 80px -40px rgb(10 10 10 / 0.45);
+  animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.intro-meta {
+  display: grid;
+  justify-items: center;
+  gap: 0.5rem;
+  text-align: center;
+  animation: rise 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+/* The paper greys were tuned against white and go milky on the gradient, so
+   both lines step down from ink instead. Every stop is light enough to carry
+   them, which is the same reason the button can run ink text. */
+.intro-meta .meta,
+.intro-skip {
+  color: rgb(10 10 10 / 0.62);
+}
+
+/* Drains over the same second the timer runs. The track is ink at low
+   alpha, not the paper rule, for the same reason the type is. */
+.intro-bar {
+  width: min(78vmin, 30rem);
+  height: 2px;
+  border-radius: 999px;
+  background: rgb(10 10 10 / 0.12);
+  overflow: hidden;
+}
+.intro-bar > span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  transform: scaleX(0);
+  /* The saturated OG stops, not the pastel wash behind them — the bar has to
+     read as a mark on the ground rather than more of it. */
+  background-image: linear-gradient(90deg, var(--grad-a), var(--grad-b));
+}
+/* Gated on the component rather than on paint: the CSS would otherwise start
+   at first paint and the timer at hydration, so on a slow connection the bar
+   would finish early, promising an exit that hasn't been scheduled yet. */
+.intro[data-run="true"] .intro-bar > span {
+  animation: intro-drain 1s linear forwards;
+}
+@keyframes intro-drain {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* Centred under the bar: the one place the eye already is. Underlined so it
+   reads as a control rather than another caption. */
+.intro-skip-inline {
+  color: rgb(10 10 10 / 0.72);
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  text-decoration-thickness: 1px;
+  opacity: 0.85;
+  cursor: pointer;
+}
+
+.intro-hint {
+  color: rgb(10 10 10 / 0.42);
+  margin-top: -1.25rem; /* Sits with the button above, not as a third block. */
+}
+
+.intro-skip {
+  position: fixed;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  opacity: 0.75;
+}
+
 /* Read-more panel: animated grid expand, no JS measurement. */
 .expand {
   display: grid;

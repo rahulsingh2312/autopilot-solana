@@ -1,0 +1,25 @@
+{
+  "name": "@autopilot/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --experimental-sqlite --watch src/index.ts",
+    "start": "node --experimental-sqlite src/index.ts",
+    "ingest": "node --experimental-sqlite src/cli.ts ingest",
+    "plan": "node --experimental-sqlite src/cli.ts plan",
+    "publish": "node --experimental-sqlite src/cli.ts publish",
+    "holdings": "node --experimental-sqlite src/cli.ts holdings",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@solana/kit": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

@@ -94,49 +94,6 @@ export type TrackerConfig = {
 
 export const TRACKERS: TrackerConfig[] = [
   {
-    ticker: "mbtSOL",
-    name: "Michael Burry Tracker",
-    status: "frozen",
-    accent: "#FF6A55",
-    accentInk: "#05080F",
-    portrait: "/portraits/burry.jpg",
-    portraitAlt: "Michael Burry",
-    subject: "Michael Burry",
-    hook: "Michael Burry's final disclosed book, frozen at the moment he walked away.",
-    about: [
-      "Scion Asset Management filed its final 13F on November 3, 2025 and deregistered with the SEC seven days later. Burry told investors he would liquidate and return capital by year end. There is no next filing coming.",
-      "mbtSOL holds the last disclosed common-stock book: four names, $68.1M, exactly as reported. It will never rebalance, because there is nothing left to rebalance against. A closing snapshot of a famous career, held as a token.",
-    ],
-    source: "SEC Form 13F-HR, Scion Asset Management, Q3 2025 (final)",
-    sourceUrl:
-      "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001649339&type=13F",
-    rebalance: "Never. The source is gone.",
-    filingDelay: "Permanently stale since Nov 3, 2025",
-    caveat:
-      "About 80% of Scion's final reported book was put options on Palantir and Nvidia. A long-only vault cannot hold a put, so none of that is here. This tracks the common-stock sleeve only, renormalized to 100%.",
-    legs: [
-      {
-        symbol: "MOH",
-        company: "Molina Healthcare",
-        weightBps: 3511,
-        tokenized: false,
-      },
-      {
-        symbol: "LULU",
-        company: "Lululemon Athletica",
-        weightBps: 2611,
-        tokenized: false,
-      },
-      { symbol: "SLM", company: "SLM Corp", weightBps: 1950, tokenized: false },
-      {
-        symbol: "BRKR",
-        company: "Bruker Corp",
-        weightBps: 1928,
-        tokenized: false,
-      },
-    ],
-  },
-  {
     ticker: "icSOL",
     name: "Inverse Cramer Index",
     status: "live",
@@ -152,7 +109,7 @@ export const TRACKERS: TrackerConfig[] = [
     ],
     source: "Editorial. Curated by Autopilot from Mad Money coverage.",
     sourceUrl: "https://www.cnbc.com/mad-money/",
-    rebalance: "Monthly, on the first trading day",
+    rebalance: "On each new disclosure",
     filingDelay: "None. There is no filing.",
     caveat:
       "Autopilot picks these names. No regulator, no filing, no rule you can audit. If you want holdings somebody else is legally on the hook for, this is not it.",
@@ -249,7 +206,7 @@ export const TRACKERS: TrackerConfig[] = [
     ],
     source: "STOCK Act disclosures, aggregated across members",
     sourceUrl: "https://disclosures-clerk.house.gov/FinancialDisclosure",
-    rebalance: "Quarterly",
+    rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days by law",
     caveat:
       "An equal-weight set of the most commonly disclosed names, not a size-weighted aggregate: disclosure ranges make true sizing impossible. It tracks what Congress holds most widely, not what it holds most of.",
@@ -278,7 +235,7 @@ export const TRACKERS: TrackerConfig[] = [
     source: "SEC Form 13F-HR, Berkshire Hathaway, Q1 2026",
     sourceUrl:
       "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001067983&type=13F",
-    rebalance: "Quarterly, on each 13F",
+    rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days after quarter end",
     caveat:
       "Top six positions only, out of 29, renormalized to 100%. Berkshire's biggest asset is a mountain of T-bills no equity tracker can represent, so this is the equity sleeve, concentrated further.",
@@ -289,35 +246,6 @@ export const TRACKERS: TrackerConfig[] = [
       { symbol: "BAC", company: "Bank of America", weightBps: 1290, tokenized: true, xstock: "BACx" },
       { symbol: "CVX", company: "Chevron", weightBps: 1250, tokenized: true, xstock: "CVXx" },
       { symbol: "GOOGL", company: "Alphabet", weightBps: 1250, tokenized: true, xstock: "GOOGLx" },
-    ],
-  },
-  {
-    ticker: "jstSOL",
-    name: "Jim Simons Tracker",
-    status: "live",
-    accent: "#8E5CE7",
-    accentInk: "#FFFFFF",
-    portrait: "/portraits/simons.jpg",
-    portraitAlt: "Jim Simons",
-    subject: "Jim Simons",
-    hook: "The man died in 2024. The machine he built keeps filing.",
-    about: [
-      "Renaissance Technologies still reports a 13F every quarter: $64B across thousands of algorithmically chosen positions. jstSOL holds the five largest from Q1 2026, renormalized.",
-      "Be clear about what this is not: Medallion, the fund that made Simons a legend, is closed to outsiders and discloses nothing. This tracks the public tip of a very private iceberg.",
-    ],
-    source: "SEC Form 13F-HR, Renaissance Technologies, Q1 2026",
-    sourceUrl:
-      "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001037389&type=13F",
-    rebalance: "Quarterly, on each 13F",
-    filingDelay: "Up to 45 days after quarter end",
-    caveat:
-      "RenTec's top position is 1.66% of a portfolio with thousands of names. Five holdings cannot track a strategy built on breadth; this is a sample of the machine's output, not the machine.",
-    legs: [
-      { symbol: "UTHR", company: "United Therapeutics", weightBps: 2400, tokenized: true, xstock: "UTHRx" },
-      { symbol: "PLTR", company: "Palantir", weightBps: 2300, tokenized: true, xstock: "PLTRx" },
-      { symbol: "AAPL", company: "Apple", weightBps: 1800, tokenized: true, xstock: "AAPLx" },
-      { symbol: "KGC", company: "Kinross Gold", weightBps: 1800, tokenized: false },
-      { symbol: "MU", company: "Micron", weightBps: 1700, tokenized: true, xstock: "MUx" },
     ],
   },
   {
@@ -337,7 +265,7 @@ export const TRACKERS: TrackerConfig[] = [
     source: "SEC Form 13F-HR, Pershing Square Capital, Q1 2026",
     sourceUrl:
       "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001336528&type=13F",
-    rebalance: "Quarterly, on each 13F",
+    rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days after quarter end",
     caveat:
       "Top five of eleven positions, renormalized. 13Fs omit swaps and hedges, and Ackman uses both, so the fund's true exposure can differ from its filing in ways psqSOL cannot see.",
@@ -357,24 +285,15 @@ export const getTracker = (ticker: string) =>
   TRACKERS.find((t) => t.ticker.toLowerCase() === ticker.toLowerCase());
 
 /**
- * Every image on the site, with the credit its licence requires. There is no
- * entry for Michael Burry because no freely licensed photograph of him
- * exists, which is why his card carries a redacted plate.
+ * Every image on the site, with the credit its licence requires.
  */
 export const IMAGE_CREDITS = [
   {
-    subject: "Nancy Pelosi, Warren Buffett, Jim Simons, Bill Ackman",
+    subject: "Nancy Pelosi, Warren Buffett, Bill Ackman",
     author: "Wikipedia lead images",
     license: "free licenses via Wikimedia Commons",
     licenseUrl: "https://commons.wikimedia.org",
     sourceUrl: "https://commons.wikimedia.org",
-  },
-  {
-    subject: "Michael Burry",
-    author: "press photo, The Big Short premiere (2015)",
-    license: "MVP placeholder, replace before launch",
-    licenseUrl: "https://en.wikipedia.org/wiki/Michael_Burry",
-    sourceUrl: "https://en.wikipedia.org/wiki/Michael_Burry",
   },
   {
     subject: "Jim Cramer",

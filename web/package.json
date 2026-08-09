@@ -15,6 +15,7 @@
     "@solana/kit-plugin-wallet": "^0.14.0",
     "@solana/react": "^7.0.0",
     "disposablestack": "^1.1.8",
+    "lucide-react": "^1.30.0",
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",

@@ -1,13 +1,19 @@
+pub mod close_tracker;
 pub mod deposit;
 pub mod initialize_tracker;
+pub mod push_multiplier;
 pub mod rebalance;
 pub mod redeem_for_sol;
 pub mod redeem_in_kind;
 pub mod set_token_metadata;
+pub mod swap_leg;
 
+pub use close_tracker::*;
 pub use deposit::*;
 pub use initialize_tracker::*;
+pub use push_multiplier::*;
 pub use rebalance::*;
 pub use redeem_for_sol::*;
 pub use redeem_in_kind::*;
 pub use set_token_metadata::*;
+pub use swap_leg::*;

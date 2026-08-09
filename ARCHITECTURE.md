@@ -11,8 +11,10 @@ back for SOL whenever you want.
 autopilot-solana/
 ├── anchor/                  Solana program (Anchor 1.1.2)
 │   └── programs/autopilot-vault/src/
+├── backend/                 Tracking worker (Node 24, no build step)
+│   └── src/                 sources → plan → execute, plus the HTTP API
 └── web/                     Next.js 16 app (App Router)
-    ├── src/
+    ├── src/                 site + /admin operations console
     └── scripts/             operational scripts, run with node
 ```
 
@@ -82,6 +84,9 @@ that is every leg, because tokenized equities are mainnet-only.
 | `redeem_for_sol(shares_in, min_lamports_out)` | holder | Burns shares, pays out `net_assets * shares / supply` minus fee. **Works while paused** |
 | `redeem_in_kind(shares_in)` | holder | Burns shares, delivers pro-rata of each tokenized leg via `remaining_accounts` triples (mint, vault ATA, holder ATA) plus the SOL sleeve. Fee is a haircut retained by the vault. **Needs no oracle** |
 | `rebalance(legs)` | authority | Publishes a new basket, bumps `rebalance_count`, emits an event |
+| `swap_leg(amount_in, min_out, route)` | authority | Routes one leg through Jupiter, signed by the **vault PDA**. Custody is never broken |
+| `push_multiplier(feed_id, multiplier)` | authority | Records a leg's Pyth feed and xStocks rebasing multiplier in a `LegOracle` PDA |
+| `close_tracker` | authority | Retires a tracker. **Refuses while any share is outstanding** |
 | `set_paused(bool)` | authority | Halts deposits only |
 | `set_fees(deposit_ppm, redeem_ppm)` | authority | Within the compiled 3% ceiling |
 | `set_token_metadata(name, symbol, uri)` | authority | Metaplex CPI. Required because the mint authority is a PDA, so only the program can sign |
@@ -102,18 +107,37 @@ that is every leg, because tokenized equities are mainnet-only.
 
 ```bash
 cd anchor
-anchor build                      # needs Anchor 1.1.2
+cargo build-sbf --tools-version v1.52
 solana program deploy target/deploy/autopilot_vault.so \
   --program-id 8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK --url devnet
+anchor idl build -o target/idl/autopilot_vault.json   # keep the IDL honest
 ```
 
-> **macOS gotcha:** `anchor build` hangs in `strip.sh` if
-> `platform-tools-sdk/sbf/dependencies/platform-tools` is missing. Symlink it to
-> `~/.cache/solana/v1.52/platform-tools`.
+> **`--tools-version v1.52` is not optional.** `cargo build-sbf` defaults to
+> platform-tools v1.51 and will re-download it into `~/.cache/solana/v1.51`;
+> that download has truncated repeatedly here, and the failure mode is the
+> worst kind — the build prints an error but **leaves the previous
+> `target/deploy/*.so` in place**, so a deploy silently ships the old binary.
+> Always verify before deploying:
+>
+> ```bash
+> strings target/deploy/autopilot_vault.so | grep -c "Rebasing multiplier"
+> ```
+>
+> If you do repair v1.51 by extracting the tarball by hand, clear the quarantine
+> flag or dyld refuses the toolchain's own dylibs:
+> `xattr -dr com.apple.quarantine ~/.cache/solana/v1.51/platform-tools`.
 
-> **Upgrades need ~2.4 SOL transiently** for the deploy buffer, even though it
-> is refunded. The devnet faucet rate-limits hard; redeeming our own tracker
-> shares is a reliable way to reclaim SOL when short.
+> **The binary no longer fits the original allocation.** Adding the Pyth
+> receiver SDK took it from ~342 KB to ~405 KB, past the 350,000 bytes the
+> program data account was created with. It has been extended to 425,000; a
+> future dependency that pushes past that needs `solana program extend` first,
+> and the deploy buffer scales with it.
+
+> **Upgrades need ~2.8 SOL transiently** for the deploy buffer, refunded on
+> success. The devnet faucet rate-limits hard and stays limited for hours.
+> `~/.config/solana/cargo-manifest-id.json` is a second funded devnet wallet;
+> redeeming tracker shares also works but empties the vaults the site displays.
 
 ---
 
@@ -129,14 +153,46 @@ On devnet the vault holds only SOL and SOL is the unit of account, so NAV is
 pinned at 1.0000. These are cash vaults with a published target basket, and the
 UI says so.
 
-**The mainnet gap:** `net_assets()` counts only lamports. Fund a vault with
-tokenized equities without changing it and NAV ignores them entirely, so
-depositors mint far too many shares and dilute existing holders. Mainnet needs
-a valuation step reading each leg's balance against a SOL-denominated price,
-multiplied by the xStocks rebasing multiplier.
+**The mainnet gap, now closed in code.** `net_assets()` counted only lamports,
+so a vault funded with tokenized equities would price them at nothing and mint
+depositors far too many shares. `oracle.rs` adds the valuation step, and both
+`deposit` and `redeem_for_sol` now use it:
 
-`redeem_in_kind` is unaffected: it pays `vault_balance × shares ÷ supply` per
-leg, correct at any price, so it keeps working even if a feed goes stale.
+```
+net_assets = (vault lamports − rent_reserve)
+           + Σ over tokenized legs:
+               balance × multiplier ÷ 10^decimals × pyth(equity) ÷ pyth(SOL)
+```
+
+Three things make it work, and each is load-bearing:
+
+- **The multiplier is pushed, not read.** Pyth publishes NVDA's price; nobody
+  publishes the factor converting an NVDAx balance into NVDA shares. Backed
+  does, over HTTP, so the worker pushes it into a `LegOracle` PDA. It is the
+  one trusted input, bounded to 0.01×–100× on chain so a bad push can nudge NAV
+  but never invent it.
+- **Equity feeds are allowed to be four days stale, SOL only sixty seconds.**
+  US equities do not tick overnight or at weekends, and the last close *is* the
+  right valuation then — that is how any fund prices. Demanding a fresh equity
+  tick would disable deposits two thirds of the week. SOL trades continuously,
+  so a stale SOL price means a broken feed.
+- **A separate PDA, not a new `Tracker` field.** Adding to `BasketLeg` would
+  change the account layout and force migrating every deployed tracker, for
+  data that moves on a different schedule entirely.
+
+Devnet is untouched: no leg there is tokenized, `value_tokenized_legs` returns
+zero, and the arithmetic is exactly what it was.
+
+`redeem_in_kind` remains oracle-free: it pays `vault_balance × shares ÷ supply`
+per leg, correct at any price, so it keeps working even if every feed is stale.
+That matters, because a large SOL redemption out of a mostly-tokenized vault
+will now compute a correct payout and then fail the rent-reserve check — the
+sleeve cannot cover it, and in-kind is the holder's recourse.
+
+**Still open:** the four-day equity window means a depositor can transact on
+Friday's close before Monday's open. Every fund has this problem and solves it
+with cutoffs or swing pricing; here the deposit fee is the only friction, and
+that is a product decision rather than a solved one.
 
 ---
 
@@ -253,9 +309,52 @@ unchanged. Wallets cache images hard, so the change is not instant.
   trades, Sharpe −0.171, −13.99% last year.
 
 **Not built:**
-- Oracle-backed `net_assets`, the prerequisite for mainnet.
 - Creator-launched indexes. The program is generic enough; what is missing is
   the creator flow, fee split, and the trust surface separating a stranger's
   basket from a curated one.
-- Real swaps into tokenized equities (mainnet-only mints).
-- An audit. The program is unreviewed and the site says so.
+- An audit. The program is unreviewed and the site says so — and the surface
+  that most needs one is now `swap_leg`, which forwards unchecked accounts into
+  a CPI.
+
+---
+
+## 8. The tracking worker
+
+`backend/` watches the sources, decides what each vault should hold, and moves
+it there. Full detail in `backend/README.md`; what matters here is the shape.
+
+```
+SourceAdapter → Filing → TargetPortfolio → RebalancePlan → publish → swap
+```
+
+Every stage is a stored value, so any basket on the site traces back to the
+filing that caused it and the transaction that applied it.
+
+**Sources.** SEC EDGAR 13F drives bwSOL, jstSOL, psqSOL and mbtSOL — free,
+official, structured, no key. icSOL is pushed from the admin panel. pltSOL and
+cgSOL need a paid congress provider and ship disabled rather than guessing;
+that decision is a config flip, not a code change.
+
+Three things about 13F data the parser handles and a naive reader does not:
+rows are not positions (Berkshire's Q1 2026 filing is 90 rows describing 29
+holdings, one per manager); `<putCall>` rows are options a long-only vault
+cannot hold; and only the top of the book is CUSIP-resolved, because
+Renaissance discloses 3,213 names and jstSOL keeps five.
+
+> Running it against the real filings corrected two things the hand-written
+> config had wrong. Scion's final book was **95.1% options by reported value**,
+> not the ~80% the site says. And Berkshire's actual Q1 2026 top six ends in
+> **OXY, not GOOGL** — bwSOL's live basket is stale by one position, and the
+> planner scores it at 31.98% drift.
+
+**Modes.** Each tracker is `manual` (plan + Telegram alert, nothing lands until
+someone approves) or `auto` (publishes itself), with `autoSwap` gating whether
+it also trades. Approval and automation call the same `applyPlan`, so what a
+human approves is exactly what automation would have done. Default is manual.
+
+**Publish and swap are separate, always in that order.** Swapping first would
+leave the vault holding something its published weights do not describe.
+
+**The admin console** lives at `/admin` in the web app and proxies to the
+worker server-side, so the token that can move a vault's assets never reaches a
+browser. Panel login and worker authority are deliberately different secrets.

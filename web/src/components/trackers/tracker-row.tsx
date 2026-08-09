@@ -11,8 +11,46 @@ import {
   formatWeight,
   lamportsToSolNumber,
 } from "@/lib/format";
+import { formatReturn, useTrackerReturns } from "@/lib/returns";
 import { useVault } from "@/lib/vault/hooks";
 import { TokenMark, useXstocks } from "./token-mark";
+
+/**
+ * The basket's trailing year, on the right where the eye can run down the
+ * column and compare funds without opening any of them.
+ *
+ * Labelled "1Y backtest", never "1Y". There is no room on a list row for the
+ * full method, so the one word that stops it being read as a track record has
+ * to be the word that is there. The long version lives on the fund panel.
+ *
+ * Every row shares one SWR key, so seven of these cost one request.
+ */
+function TrailingYear({ tracker }: { tracker: TrackerConfig }) {
+  const { oneYear, isLoading } = useTrackerReturns(tracker);
+
+  // A basket with no tokenized leg has nothing to price, so it gets no number rather than a
+  // zero. Nothing renders, and the arrow keeps its place.
+  if (oneYear === null) return null;
+
+  return (
+    <span
+      className={`flex shrink-0 flex-col items-end gap-0.5 transition-opacity ${
+        isLoading ? "opacity-40" : "opacity-100"
+      }`}
+    >
+      <span
+        className={`num text-lg font-semibold tabular-nums sm:text-xl ${
+          oneYear >= 0 ? "text-pos" : "text-neg"
+        }`}
+      >
+        {formatReturn(oneYear)}
+      </span>
+      <span className="num text-[0.625rem] uppercase tracking-wider text-faint">
+        1Y backtest
+      </span>
+    </span>
+  );
+}
 
 /** Small halftone avatar; falls back to the ticker in mono when no portrait. */
 function Avatar({ tracker }: { tracker: TrackerConfig }) {
@@ -109,6 +147,8 @@ export function TrackerRow({
             )}
           </span>
         </div>
+
+        <TrailingYear tracker={tracker} />
 
         <svg
           aria-hidden

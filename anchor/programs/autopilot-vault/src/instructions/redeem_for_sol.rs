@@ -52,8 +52,8 @@ pub struct RedeemForSol<'info> {
 
 /// Redemption stays open while paused. Pausing stops new money coming in, it
 /// does not trap money that is already in.
-pub fn handle_redeem_for_sol(
-    ctx: Context<RedeemForSol>,
+pub fn handle_redeem_for_sol<'info>(
+    ctx: Context<'info, RedeemForSol<'info>>,
     shares_in: u64,
     min_lamports_out: u64,
 ) -> Result<()> {
@@ -63,7 +63,27 @@ pub fn handle_redeem_for_sol(
     require!(supply_before > 0, VaultError::NoSharesOutstanding);
 
     let vault_lamports = ctx.accounts.vault.lamports();
-    let assets_before = ctx.accounts.tracker.net_assets(vault_lamports);
+
+    // Valued the same way a deposit is, and for the same reason in reverse: a
+    // holder redeeming out of a vault that holds equities is owed a share of
+    // those equities too, not just of the SOL sleeve. Pricing this on lamports
+    // alone would quietly pay them a fraction of what their shares are worth.
+    //
+    // The consequence is that a large SOL redemption out of a mostly-tokenized
+    // vault computes a correct payout and then fails the reserve check below,
+    // because the sleeve cannot cover it. That is the right failure: the
+    // holder's recourse is `redeem_in_kind`, which delivers the legs
+    // themselves, needs no oracle, and is correct at any price.
+    let leg_value = crate::oracle::value_tokenized_legs(
+        &ctx.accounts.tracker,
+        &ctx.accounts.tracker.key(),
+        &ctx.accounts.vault.key(),
+        ctx.remaining_accounts,
+    )?;
+    let assets_before = ctx
+        .accounts
+        .tracker
+        .total_net_assets(vault_lamports, leg_value)?;
     require!(assets_before > 0, VaultError::EmptyVault);
 
     let gross = mul_div(assets_before, shares_in, supply_before)?;

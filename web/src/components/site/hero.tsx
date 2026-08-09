@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { PlaneTakeoff } from "lucide-react";
 
 import { CountUp } from "@/components/ui/count-up";
 import { DepositFlow } from "@/components/site/deposit-flow";
@@ -8,6 +9,7 @@ import { NavFootnote, NavStar } from "@/components/ui/nav-note";
 import { Halftone } from "@/components/ui/halftone";
 import { SolMark } from "@/components/ui/sol-mark";
 import { TokenTicker } from "@/components/ui/token-icon";
+import { Performance } from "@/components/trackers/performance";
 import { TradeForm } from "@/components/trackers/trade-form";
 import { TokenMark, useXstocks } from "@/components/trackers/token-mark";
 import { useTrackerSelection } from "@/components/trackers/selection";
@@ -26,7 +28,12 @@ import {
   truncateAddress,
 } from "@/lib/format";
 import { useVault } from "@/lib/vault/hooks";
-import { formatUsdPrice, useBasketPrices } from "@/lib/xstocks";
+import {
+  formatChange,
+  formatUsdCompact,
+  formatUsdPrice,
+  useBasketPrices,
+} from "@/lib/xstocks";
 
 const PORTRAITS = TRACKERS.filter((t) => t.portrait).map((t) => ({
   src: t.portrait!,
@@ -154,9 +161,9 @@ function TrackingStrip({ tracker }: { tracker: TrackerConfig }) {
     {
       label: "Source publishes",
       value: tracker.rebalance,
-      note: frozen
-        ? `${holdings} are fixed at the final filing and will not move again.`
-        : `That is the cadence the filer reports on. ${holdings} do not move in between, and each move is one transaction you can look up.`,
+      // One cadence line for every tracker, frozen or not: the cell states
+      // when the source speaks, and the source speaks by disclosing.
+      note: `That is the cadence the filer reports on. ${holdings} do not move in between, and each move is one transaction you can look up.`,
     },
     {
       // Two different delays used to be conflated here. This one is ours: the
@@ -302,12 +309,32 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
           <div className="flex items-baseline justify-between gap-3">
             <span className="meta">Holdings</span>
             {prices.tokenizedCount > 0 ? (
-              <span className="num text-[0.625rem] text-faint">
-                {prices.hasAnyPrice
-                  ? "live from xStocks"
-                  : prices.marketClosed
-                    ? "US market closed"
-                    : "prices unavailable"}
+              <span className="num flex items-baseline gap-2 text-[0.625rem] text-faint">
+                {prices.hasAnyPrice ? (
+                  <>
+                    {/* The basket's own 24h move. Renormalized over the legs
+                        actually priced, and it says so when that is not all
+                        of them rather than quietly averaging toward zero. */}
+                    {prices.change24h !== null ? (
+                      <span
+                        className={
+                          prices.change24h >= 0 ? "text-pos" : "text-neg"
+                        }
+                        title={
+                          prices.coverageBps < 10_000
+                            ? `Covers ${formatWeight(prices.coverageBps)} of the basket`
+                            : "24h move across the whole basket"
+                        }
+                      >
+                        {formatChange(prices.change24h)} 24h
+                        {prices.coverageBps < 10_000 ? "*" : ""}
+                      </span>
+                    ) : null}
+                    {/* <span>live from Jupiter</span> */}
+                  </>
+                ) : (
+                  "prices unavailable"
+                )}
               </span>
             ) : null}
           </div>
@@ -333,10 +360,23 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
                   const quote = leg.xstock
                     ? prices.bySymbol.get(leg.xstock)
                     : undefined;
-                  if (!quote?.price) return null;
+                  if (!quote) return null;
                   return (
-                    <span className="num shrink-0 tabular-nums text-ink">
-                      {formatUsdPrice(quote.price)}
+                    <span className="flex shrink-0 items-baseline gap-1.5">
+                      <span className="num tabular-nums text-ink">
+                        {formatUsdPrice(quote.usdPrice)}
+                      </span>
+                      {quote.change24h !== null ? (
+                        <span
+                          className={`num w-14 text-right text-[0.6875rem] tabular-nums ${
+                            quote.change24h >= 0 ? "text-pos" : "text-neg"
+                          }`}
+                        >
+                          {formatChange(quote.change24h)}
+                        </span>
+                      ) : (
+                        <span className="w-14" />
+                      )}
                     </span>
                   );
                 })()}
@@ -354,6 +394,24 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
             >
               {allLegs ? "Show less" : `Show all ${tracker.legs.length}`}
             </button>
+          ) : null}
+
+          {/* Pool depth, stated rather than buried. Prices come from Solana
+              AMMs, and a leg whose pool is a few tens of thousands of dollars
+              cannot absorb a real rebalance without moving against itself.
+              That is a limit on the product, so it belongs on the card. */}
+          {prices.thin.length > 0 ? (
+            <p className="border-t border-rule pt-2 text-[0.6875rem] leading-relaxed text-faint">
+              Thin on-chain liquidity:{" "}
+              {prices.thin
+                .map(
+                  (p) =>
+                    `${p.symbol} ${formatUsdCompact(p.liquidity as number)}`,
+                )
+                .join(", ")}
+              . Prices are live, but a large rebalance through those pools would
+              move them.
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -472,8 +530,15 @@ export function Hero() {
               className="rise flex flex-wrap items-center gap-3"
               style={{ "--delay": "180ms" } as React.CSSProperties}
             >
-              <a href="#trackers" className="btn btn-grad">
-                Deposit SOL
+              <a href="#trackers" className="btn btn-grad group">
+                Run it up
+                {/* The plane lifts off toward the trackers the button scrolls
+                    to. Reduced motion already flattens the transition. */}
+                <PlaneTakeoff
+                  size={16}
+                  aria-hidden="true"
+                  className="transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+                />
               </a>
               <a href="#how" className="btn btn-ghost">
                 How it works
@@ -497,11 +562,20 @@ export function Hero() {
           </div>
         )}
 
+        {/* The backtest sits under the portrait rather than under the holdings:
+            it belongs to the person, not to the panel, and the column it used
+            to live in was already carrying the weights, the caveat, and the
+            trade form. */}
         <div
-          className="rise flex justify-center lg:justify-end lg:self-center"
+          /* w-fit takes its width from the portrait, the widest child, and the
+             default stretch then pulls the backtest out to the same edges —
+             so the two read as one stacked unit instead of a card parked
+             under a picture. */
+          className="rise mx-auto flex w-fit flex-col gap-6 lg:mx-0 lg:ml-auto lg:self-center"
           style={{ "--delay": "150ms" } as React.CSSProperties}
         >
           <PortraitCycle pinned={selected} index={index} />
+          {selected ? <Performance tracker={selected} /> : null}
         </div>
       </div>
 
