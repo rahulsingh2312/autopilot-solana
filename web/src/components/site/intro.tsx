@@ -4,8 +4,20 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 
 import { BRAND } from "@/lib/config";
 
-/** How long the card holds. Matches the clip and the .intro-bar drain. */
+/**
+ * How long the card holds once the clip is actually rolling. Matches the
+ * length of the clip and the .intro-bar drain.
+ */
 const HOLD_MS = 1000;
+/**
+ * Ceiling on waiting for the first frame. A hold that started at hydration
+ * spent itself on the download instead: production dismissed the card at
+ * ~1.4s having decoded nothing, so a cold visit saw the poster and never the
+ * clip. Now the hold starts at playback and this only covers the case where
+ * playback never comes — a refused autoplay, a stalled network — so nobody
+ * is left staring at a still.
+ */
+const STALL_MS = 1200;
 /** Must match the .intro transition in globals.css, or it unmounts mid-fade. */
 const FADE_MS = 650;
 
@@ -39,6 +51,7 @@ function shouldPlay() {
 export function Intro() {
   const [playing, setPlaying] = useState(shouldPlay);
   const [running, setRunning] = useState(false);
+  const [holding, setHolding] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
 
@@ -62,14 +75,12 @@ export function Intro() {
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
 
-    const hold = setTimeout(dismiss, HOLD_MS);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter" || e.key === " ") dismiss();
     };
     window.addEventListener("keydown", onKey);
 
     return () => {
-      clearTimeout(hold);
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
     };
@@ -85,11 +96,29 @@ export function Intro() {
     // looks exactly like a still image. Set both, then ask to play.
     el.muted = true;
     el.setAttribute("muted", "");
+
+    // The hold starts on the first decoded frame, not on mount, so the second
+    // the card is up is a second of clip rather than a second of downloading.
+    const begin = () => setHolding(true);
+    el.addEventListener("playing", begin, { once: true });
+    const stall = setTimeout(begin, STALL_MS);
+
     el.play().catch(() => {
       // Blocked anyway: the poster underneath is a legitimate last resort, and
-      // the timer above owns the exit regardless, so nobody gets stranded.
+      // the stall timer still starts the hold, so nobody gets stranded.
     });
+
+    return () => {
+      el.removeEventListener("playing", begin);
+      clearTimeout(stall);
+    };
   }, [running]);
+
+  useEffect(() => {
+    if (!holding) return;
+    const hold = setTimeout(dismiss, HOLD_MS);
+    return () => clearTimeout(hold);
+  }, [holding, dismiss]);
 
   useEffect(() => {
     if (!leaving) return;
@@ -100,7 +129,7 @@ export function Intro() {
   return (
     <div
       className="intro"
-      data-run={running}
+      data-run={holding}
       data-leaving={leaving}
       onClick={dismiss}
       role="presentation"

@@ -81,6 +81,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: INTRO_FLAG }} />
+        {/* The clip is only requested once the Intro component mounts, which
+            is after the bundle downloads and hydrates — long enough that a
+            cold visit dismissed the card before a single frame had decoded,
+            showing the poster and nothing else. Preloading starts the fetch
+            during parse instead, in parallel with the JS. */}
+        <link rel="preload" as="video" href="/intro.mp4" type="video/mp4" />
       </head>
       <body className="dotgrid flex min-h-full flex-col">
         <Intro />
