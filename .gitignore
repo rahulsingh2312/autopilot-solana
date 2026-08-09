@@ -7,3 +7,6 @@ anchor/.surfpool/
 .agents/
 .vercel
 .env*
+
+# Screen recordings dropped in for reference, not source.
+*.mov

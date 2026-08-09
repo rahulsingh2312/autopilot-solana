@@ -1,11 +1,21 @@
 /**
  * The mint's own artwork for a tracker token.
  *
- * This is the same file a wallet renders for the asset, served from
- * public/tokens/<ticker>.png and referenced by the token metadata. Drawing
- * something else here would give one asset two identities, so every place a
- * ticker appears in the UI reaches for this rather than inventing a chip.
+ * Above HALFTONE_MIN this is the halftone the token metadata points at, so
+ * the site and a wallet show the same object. Below it, the source switches
+ * to the un-screened headshot in public/avatars.
+ *
+ * That is a deliberate exception, measured rather than assumed: rendered at
+ * 18px, a screen of 5px dots is finer than the pixel grid it lands on, and
+ * every face collapses into identical grey discs. The photographic cut stays
+ * legible at that size and its ring colour tells rows apart. A mark nobody
+ * can distinguish is not identity, it is noise, and the halftone still owns
+ * every surface big enough to actually show it.
  */
+
+/** Below this many CSS px the dot screen stops resolving. */
+const HALFTONE_MIN = 40;
+
 export function TokenIcon({
   ticker,
   size = 18,
@@ -16,12 +26,16 @@ export function TokenIcon({
   size?: number;
   className?: string;
 }) {
+  const slug = ticker.toLowerCase();
+  const src =
+    size >= HALFTONE_MIN ? `/tokens/${slug}.png` : `/avatars/${slug}.png`;
+
   return (
     // A 7-file static set at icon size: the optimizer would cost a round trip
     // to save nothing.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`/tokens/${ticker.toLowerCase()}.png`}
+      src={src}
       alt=""
       width={size}
       height={size}

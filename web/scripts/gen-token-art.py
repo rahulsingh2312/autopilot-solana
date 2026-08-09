@@ -36,6 +36,7 @@ SIZE = 512          # final token image, square
 PITCH = 5           # css px between dot centres, at SIZE
 SUPERSAMPLE = 4     # draw big, shrink down: antialiasing for free
 RING = 16           # gradient ring thickness at SIZE
+
 # The source avatars carry a flat accent ring of about this thickness.
 # Everything outside it is discarded so it cannot become dots.
 SRC_RING = 20
@@ -142,22 +143,24 @@ def framed_disc(path):
     )
 
 
-def halftone(source, focus=None):
+def halftone(source, focus=None, size=SIZE, pitch=PITCH, ring=RING):
     src = focus_crop(source, focus) if focus else framed_disc(source)
+    if size != SIZE:
+        src = src.resize((size, size), Image.LANCZOS)
 
-    cells = math.ceil(SIZE / PITCH)
+    cells = math.ceil(size / pitch)
     grid = src.resize((cells, cells), Image.LANCZOS)
     # Portraits are mostly mid-tones, and mid-tones all map to mid-sized dots,
     # which reads as texture rather than a face. Stretch the range first.
     grid = ImageOps.autocontrast(grid, cutoff=2)
     px = grid.load()
 
-    big = SIZE * SUPERSAMPLE
+    big = size * SUPERSAMPLE
     canvas = Image.new("RGBA", (big, big), (255, 255, 255, 255))
     draw = ImageDraw.Draw(canvas)
 
-    step = PITCH * SUPERSAMPLE
-    max_r = (PITCH / 2) * 0.92 * SUPERSAMPLE
+    step = pitch * SUPERSAMPLE
+    max_r = (pitch / 2) * 0.92 * SUPERSAMPLE
     min_r = 0.35 * SUPERSAMPLE
 
     for gy in range(cells):
@@ -182,15 +185,15 @@ def halftone(source, focus=None):
     disc = Image.new("RGBA", (big, big), (0, 0, 0, 0))
     disc.paste(canvas, (0, 0), mask)
 
-    ring = RING * SUPERSAMPLE
+    ring_px = ring * SUPERSAMPLE
     ring_mask = Image.new("L", (big, big), 0)
     ImageDraw.Draw(ring_mask).ellipse(
-        (ring / 2, ring / 2, big - 1 - ring / 2, big - 1 - ring / 2),
-        outline=255, width=ring,
+        (ring_px / 2, ring_px / 2, big - 1 - ring_px / 2, big - 1 - ring_px / 2),
+        outline=255, width=ring_px,
     )
     disc.paste(gradient_image(big).convert("RGBA"), (0, 0), ring_mask)
 
-    return disc.resize((SIZE, SIZE), Image.LANCZOS)
+    return disc.resize((size, size), Image.LANCZOS)
 
 
 def main():
@@ -215,8 +218,9 @@ def main():
             print(f"  {ticker:8} missing {label}, skipped")
             continue
 
-        art = halftone(source, focus)
-        art.save(out_dir / f"{slug}.png", "PNG", optimize=True)
+        halftone(source, focus).save(
+            out_dir / f"{slug}.png", "PNG", optimize=True
+        )
         written += 1
         print(f"  {ticker:8} {label:22} -> tokens/{slug}.png")
 
