@@ -32,7 +32,7 @@ const mono = JetBrains_Mono({
 
 const title = `${BRAND.name}: trade the trader, not the market`;
 const description =
-  "Seven tracker tokens on Solana. Deposit SOL, hold one token that follows a famous investor's disclosed holdings, and burn it back for SOL at NAV whenever you want. Every balance on the page is read live from the chain.";
+  "Tracker tokens on Solana. Deposit SOL, hold one token that follows a famous investor's disclosed holdings, and burn it back for SOL at NAV whenever you want. Every balance on the page is read live from the chain.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${BRAND.domain}`),
@@ -59,7 +59,6 @@ export const metadata: Metadata = {
     "copy trading",
     "on-chain index",
   ],
-  icons: { icon: "/icon.svg" },
   other: { "solana:cluster": CLUSTER },
 };
 

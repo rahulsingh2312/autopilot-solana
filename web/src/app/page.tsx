@@ -41,10 +41,10 @@ export default function Home() {
             <SectionHead
               title={
                 <>
-                  Seven portfolios, <em>seven tokens.</em>
+                  Famous portfolios, <em>one token each.</em>
                 </>
               }
-              blurb="Seven vaults live on Solana devnet. Every number below is read from the chain while you look at it."
+              blurb="Every vault below is live on Solana devnet, and every number on it is read from the chain while you look at it."
             />
             <ul className="grid gap-4 sm:grid-cols-2">
               {TRACKERS.map((tracker, i) => (
