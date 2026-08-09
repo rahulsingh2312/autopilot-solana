@@ -1,12 +1,33 @@
 {
   "name": "Michael Burry Tracker",
   "symbol": "mbtSOL",
-  "description": "One token tracking Scion Asset Management's final disclosed common-stock portfolio, frozen at the last 13F filing (Q3 2025). Deposit SOL to mint, burn to redeem for SOL any time. Devnet deployment by Autopilot.",
+  "description": "Michael Burry's final disclosed book, frozen at the moment he walked away. Deposit SOL to mint mbtSOL, burn it back for SOL at NAV any time. The source is final, so the basket never changes. Holdings: MOH, LULU, SLM, BRKR. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/mbtsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
-    { "trait_type": "Strategy", "value": "Michael Burry / Scion 13F (final)" },
-    { "trait_type": "Rebalance", "value": "Frozen" },
-    { "trait_type": "Network", "value": "Solana devnet" }
+    {
+      "trait_type": "Tracks",
+      "value": "Michael Burry"
+    },
+    {
+      "trait_type": "Source",
+      "value": "SEC Form 13F-HR, Scion Asset Management, Q3 2025 (final)"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Never. The source is gone."
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "Permanently stale since Nov 3, 2025"
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "4"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
   ]
 }

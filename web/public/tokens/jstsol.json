@@ -1,17 +1,29 @@
 {
   "name": "Jim Simons Tracker",
   "symbol": "jstSOL",
-  "description": "One token tracking Renaissance Technologies' largest 13F positions, renormalized. Medallion itself discloses nothing. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "description": "The man died in 2024. The machine he built keeps filing. Deposit SOL to mint jstSOL, burn it back for SOL at NAV any time. The source is re-read every 30 minutes and the basket updates when it changes. Holdings: UTHR, PLTR, AAPL, KGC, MU. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/jstsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
     {
-      "trait_type": "Strategy",
-      "value": "Renaissance Technologies 13F top holdings"
+      "trait_type": "Tracks",
+      "value": "Jim Simons"
+    },
+    {
+      "trait_type": "Source",
+      "value": "SEC Form 13F-HR, Renaissance Technologies, Q1 2026"
     },
     {
       "trait_type": "Rebalance",
-      "value": "Quarterly"
+      "value": "Quarterly, on each 13F"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "Up to 45 days after quarter end"
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "5"
     },
     {
       "trait_type": "Network",

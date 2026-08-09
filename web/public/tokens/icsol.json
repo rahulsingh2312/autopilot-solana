@@ -1,12 +1,33 @@
 {
   "name": "Inverse Cramer Index",
   "symbol": "icSOL",
-  "description": "One token tracking an editorial basket of the most-shouted-about names on cable TV. Deposit SOL to mint, burn to redeem for SOL any time. Devnet deployment by Autopilot.",
+  "description": "He is still on television every weeknight. That is the whole thesis. Deposit SOL to mint icSOL, burn it back for SOL at NAV any time. The source is re-read every 30 minutes and the basket updates when it changes. Holdings: NVDA, TSLA, MSTR, COIN, HOOD, CRCL. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/icsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
-    { "trait_type": "Strategy", "value": "Inverse Cramer (editorial)" },
-    { "trait_type": "Rebalance", "value": "Monthly" },
-    { "trait_type": "Network", "value": "Solana devnet" }
+    {
+      "trait_type": "Tracks",
+      "value": "Jim Cramer"
+    },
+    {
+      "trait_type": "Source",
+      "value": "Editorial. Curated by Autopilot from Mad Money coverage."
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Monthly, on the first trading day"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "None. There is no filing."
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "6"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
   ]
 }

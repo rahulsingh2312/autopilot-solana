@@ -1,17 +1,29 @@
 {
   "name": "Buffett Tracker",
   "symbol": "bwSOL",
-  "description": "One token tracking Berkshire Hathaway's largest disclosed equity positions from its quarterly 13F, renormalized. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "description": "He handed Greg Abel the keys. The 13F still prints every quarter. Deposit SOL to mint bwSOL, burn it back for SOL at NAV any time. The source is re-read every 30 minutes and the basket updates when it changes. Holdings: AAPL, AXP, KO, BAC, CVX, GOOGL. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
   "image": "https://autopilot-solana.vercel.app/tokens/bwsol.png",
   "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
     {
-      "trait_type": "Strategy",
-      "value": "Berkshire Hathaway 13F top holdings"
+      "trait_type": "Tracks",
+      "value": "Warren Buffett"
+    },
+    {
+      "trait_type": "Source",
+      "value": "SEC Form 13F-HR, Berkshire Hathaway, Q1 2026"
     },
     {
       "trait_type": "Rebalance",
-      "value": "Quarterly"
+      "value": "Quarterly, on each 13F"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "Up to 45 days after quarter end"
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "6"
     },
     {
       "trait_type": "Network",

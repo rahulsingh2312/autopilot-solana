@@ -20,6 +20,15 @@ export const CHAIN = `solana:${CLUSTER}` as const;
 
 export const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
 
+/**
+ * How often a tracker's source is re-read for changes, in minutes.
+ *
+ * Stated on the fund card and again in every token's on-chain metadata. Those
+ * two disagreeing would be a card and a wallet describing the same asset
+ * differently, so the number lives here and both read it.
+ */
+export const WATCH_MINUTES = 30;
+
 export const BRAND = {
   name: "Autopilot",
   wordmark: "AUTOPILOT",

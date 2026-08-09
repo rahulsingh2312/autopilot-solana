@@ -31,7 +31,22 @@ function VaultRow({ ticker }: { ticker: string }) {
   return (
     <tr className="border-t border-rule">
       <th scope="row" className="num py-2.5 pr-3 text-left font-medium text-ink">
-        {ticker}
+        <span className="flex items-center gap-2">
+          {/* The mint's own artwork, the same file a wallet shows for this
+              token. Anything drawn here instead would be a second identity
+              for the same asset. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/tokens/${ticker.toLowerCase()}.png`}
+            alt=""
+            width={18}
+            height={18}
+            loading="lazy"
+            decoding="async"
+            className="h-[18px] w-[18px] shrink-0 rounded-full"
+          />
+          {ticker}
+        </span>
       </th>
       <td className="py-2.5 pr-3">
         {snapshot ? (
@@ -113,7 +128,7 @@ export function Proof() {
             </div>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="meta">Audit</dt>
-              <dd className="text-ink">None. Devnet only.</dd>
+              <dd className="text-ink">Under audit.</dd>
             </div>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="meta">Source</dt>

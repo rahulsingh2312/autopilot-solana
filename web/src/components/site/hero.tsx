@@ -9,7 +9,12 @@ import { SolMark } from "@/components/ui/sol-mark";
 import { TradeForm } from "@/components/trackers/trade-form";
 import { TokenMark, useXstocks } from "@/components/trackers/token-mark";
 import { useTrackerSelection } from "@/components/trackers/selection";
-import { EXPLORER, TRACKERS, type TrackerConfig } from "@/lib/config";
+import {
+  EXPLORER,
+  TRACKERS,
+  WATCH_MINUTES,
+  type TrackerConfig,
+} from "@/lib/config";
 import {
   computeNav,
   formatBps,
@@ -105,9 +110,6 @@ function PortraitCycle({
     </figure>
   );
 }
-
-/** How often the source is re-read. One number, stated in one place. */
-const WATCH_MINUTES = 30;
 
 /** Holdings shown before the list asks to be opened. */
 const VISIBLE_LEGS = 3;
