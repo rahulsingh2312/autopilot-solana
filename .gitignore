@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.data/
+.env*.local
+anchor/target/
+anchor/.surfpool/
+.agents/
+.vercel
+.env*

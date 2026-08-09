@@ -1,0 +1,10 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [
+      ".brand-preview/typography.html",
+      ".brand-preview/index.html"
+    ],
+    "ignoreValues": []
+  }
+}

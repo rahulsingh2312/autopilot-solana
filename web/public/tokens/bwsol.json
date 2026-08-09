@@ -1,0 +1,21 @@
+{
+  "name": "Buffett Tracker",
+  "symbol": "bwSOL",
+  "description": "One token tracking Berkshire Hathaway's largest disclosed equity positions from its quarterly 13F, renormalized. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "image": "https://autopilot-solana.vercel.app/tokens/bwsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Strategy",
+      "value": "Berkshire Hathaway 13F top holdings"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

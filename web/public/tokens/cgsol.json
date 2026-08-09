@@ -1,0 +1,21 @@
+{
+  "name": "Congress Tracker",
+  "symbol": "cgSOL",
+  "description": "One token tracking the names most widely held across congressional STOCK Act disclosures, equal weighted. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "image": "https://autopilot-solana.vercel.app/tokens/cgsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Strategy",
+      "value": "Congressional disclosures, aggregated"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

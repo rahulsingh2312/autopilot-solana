@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Typography picker — Autopilot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #F4F3F1; color: #0A0A0A; }
+    body { font-family: Inter, system-ui, sans-serif; }
+
+    @keyframes flow { to { background-position: 200% center; } }
+    .grad-fill {
+      background: linear-gradient(90deg, #00FFA3, #DC1FFF, #00FFA3);
+      background-size: 200% auto;
+      animation: flow 5s linear infinite;
+    }
+    .grad-text {
+      background: linear-gradient(90deg, #00CC82, #B316D9, #00CC82);
+      background-size: 200% auto;
+      animation: flow 5s linear infinite;
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+
+    .topbar { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.85);
+      backdrop-filter: blur(12px); border-bottom: 1px solid #E5E3DE; padding: 16px 24px; }
+    .topbar h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    .topbar p { margin: 2px 0 0; font-size: 13px; opacity: 0.6; }
+    .container { max-width: 860px; margin: 0 auto; padding: 32px 24px 80px; display: grid; gap: 32px; }
+
+    .pair { background: #FFFFFF; border: 1px solid #E5E3DE; border-radius: 18px; overflow: hidden;
+      box-shadow: 0 1px 2px rgba(10,10,10,0.04), 0 12px 32px -16px rgba(10,10,10,0.1); }
+    .pair-head { display: flex; align-items: center; gap: 12px; padding: 16px 26px;
+      border-bottom: 1px solid #EFEEEA; }
+    .pair-num { display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 999px; color: #fff; font-weight: 700; font-size: 13px;
+      background: #0A0A0A; }
+    .pair-name { font-size: 14px; font-weight: 600; margin: 0; }
+    .pair-mood { font-size: 12px; opacity: 0.55; margin: 0; }
+    .stage { padding: 30px 26px 26px; }
+    .eyebrow { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.5;
+      margin: 0 0 14px; font-weight: 600; }
+    .hero { margin: 0 0 12px; line-height: 1.04; letter-spacing: -0.015em; }
+    .body-copy { font-size: 15px; line-height: 1.6; max-width: 46ch; margin: 0 0 22px; color: #3D3C39; }
+    .row { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+    .cta { border: none; cursor: pointer; color: #08110C; font-weight: 600; font-size: 14px;
+      padding: 13px 26px; border-radius: 999px; }
+    .balance { margin: 0; font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600; }
+    .balance small { display: block; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: #8B897F; margin-bottom: 4px; font-weight: 500; }
+    .footer-cta { text-align: center; padding: 24px; opacity: 0.7; font-size: 14px; }
+    code { font-family: "JetBrains Mono", monospace; background: #ECEAE5; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Autopilot typography — on your palette</h1>
+    <p>White ground · ink text · the OG gradient flowing on buttons &amp; balances (watch it move)</p>
+  </div>
+  <div class="container">
+
+    <!-- 1: Instrument Serif + Inter + JetBrains Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">1</span>
+        <div><p class="pair-name">Instrument Serif + Inter + JetBrains Mono</p>
+        <p class="pair-mood">editorial · the peterpan look · serif hero, clean UI</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'JetBrains Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:'Instrument Serif',serif; font-weight:400; font-size:54px;">Trade the trader,<br/><em>not the market.</em></h2>
+        <p class="body-copy" style="font-family:Inter,sans-serif;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill">Deposit SOL</button>
+          <p class="balance" style="font-family:'JetBrains Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 2: Fraunces + Inter + IBM Plex Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">2</span>
+        <div><p class="pair-name">Fraunces + Inter + IBM Plex Mono</p>
+        <p class="pair-mood">warm premium serif · more character, softer curves</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'IBM Plex Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:Fraunces,serif; font-weight:600; font-size:48px;">Trade the trader,<br/><em style="font-weight:400;">not the market.</em></h2>
+        <p class="body-copy" style="font-family:Inter,sans-serif;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill">Deposit SOL</button>
+          <p class="balance" style="font-family:'IBM Plex Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 3: Geist + Geist Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">3</span>
+        <div><p class="pair-name">Geist + Geist Mono</p>
+        <p class="pair-mood">technical · modern product-company minimal (Vercel's font)</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'Geist Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:Geist,sans-serif; font-weight:600; font-size:46px;">Trade the trader,<br/>not the market.</h2>
+        <p class="body-copy" style="font-family:Geist,sans-serif;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill" style="font-family:Geist,sans-serif;">Deposit SOL</button>
+          <p class="balance" style="font-family:'Geist Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 4: Manrope + JetBrains Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">4</span>
+        <div><p class="pair-name">Manrope + JetBrains Mono</p>
+        <p class="pair-mood">premium minimal · geometric, rounded terminals (Marinade energy)</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'JetBrains Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:Manrope,sans-serif; font-weight:800; font-size:46px;">Trade the trader,<br/>not the market.</h2>
+        <p class="body-copy" style="font-family:Manrope,sans-serif; font-weight:500;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill" style="font-family:Manrope,sans-serif; font-weight:700;">Deposit SOL</button>
+          <p class="balance" style="font-family:'JetBrains Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 5: Inter + JetBrains Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">5</span>
+        <div><p class="pair-name">Inter + JetBrains Mono</p>
+        <p class="pair-mood">the safe default · neutral, engineering-forward</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'JetBrains Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:Inter,sans-serif; font-weight:700; font-size:44px; letter-spacing:-0.03em;">Trade the trader,<br/>not the market.</h2>
+        <p class="body-copy" style="font-family:Inter,sans-serif;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill">Deposit SOL</button>
+          <p class="balance" style="font-family:'JetBrains Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 6: IBM Plex Sans + IBM Plex Mono -->
+    <article class="pair">
+      <div class="pair-head"><span class="pair-num">6</span>
+        <div><p class="pair-name">IBM Plex Sans + IBM Plex Mono</p>
+        <p class="pair-mood">corporate-tech · more personality than Inter, credible</p></div></div>
+      <div class="stage">
+        <p class="eyebrow" style="font-family:'IBM Plex Mono',monospace;">Famous portfolios · one token</p>
+        <h2 class="hero" style="font-family:'IBM Plex Sans',sans-serif; font-weight:600; font-size:44px;">Trade the trader,<br/>not the market.</h2>
+        <p class="body-copy" style="font-family:'IBM Plex Sans',sans-serif;">Deposit SOL, hold one token that tracks Michael Burry's last disclosed book. Burn it for SOL whenever you want. No brokerage, no market hours.</p>
+        <div class="row">
+          <button class="cta grad-fill" style="font-family:'IBM Plex Sans',sans-serif;">Deposit SOL</button>
+          <p class="balance" style="font-family:'IBM Plex Mono',monospace;"><small>Vault TVL</small><span class="grad-text">4,210.55 SOL</span></p>
+        </div>
+      </div>
+    </article>
+
+    <div class="footer-cta">
+      Pick <code>1</code>–<code>6</code>, or say <code>skip</code> for Inter + JetBrains Mono.
+    </div>
+  </div>
+</body>
+</html>

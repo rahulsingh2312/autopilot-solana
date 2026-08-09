@@ -1,0 +1,383 @@
+@import "tailwindcss";
+
+/*
+ * OG PAPER.
+ *
+ * A white graph-paper terminal, edited like a magazine. Ink serif headlines,
+ * halftone portraits, and exactly one moving thing on the page: the original
+ * Solana logo gradient (#00FFA3 → #DC1FFF), flowing through every button and
+ * live balance. Everything else is ink on paper.
+ */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+
+  --font-serif: var(--font-display-stack);
+  --font-sans: var(--font-body-stack);
+  --font-mono: var(--font-num-stack);
+}
+
+:root {
+  --bg: #ffffff;
+  --paper: #fafaf8;
+  --ink: #0a0a0a;
+  --ink-muted: #5c5b57;
+  --ink-faint: #8a8983;
+  --rule: #e7e6e1;
+  --rule-strong: #cfcec7;
+  --pos: #0ba05f;
+  --neg: #d2372c;
+
+  /* The exact OG Solana logo stops. Buttons carry these. */
+  --grad-a: #00ffa3;
+  --grad-b: #dc1fff;
+  /* Text-safe darkened variant of the same hues, for gradient numerals on white. */
+  --grad-a-ink: #00b374;
+  --grad-b-ink: #a812c4;
+
+  --font-display-stack: var(--font-instrument), Georgia, serif;
+  --font-body-stack: var(--font-inter), system-ui, sans-serif;
+  --font-num-stack: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+html {
+  background: var(--bg);
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--font-body-stack);
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Ground: one aurora wash for the whole site, dot grid printed on top ──
+   The OG hues bleed across every section, pinned to the viewport so the page
+   scrolls through a single continuous field instead of one glow at the top. */
+
+.dotgrid {
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgb(10 10 10 / 0.07) 1px, transparent 0),
+    radial-gradient(46% 40% at 12% 6%, rgb(0 255 163 / 0.16), transparent 70%),
+    radial-gradient(50% 44% at 86% 2%, rgb(220 31 255 / 0.14), transparent 72%),
+    radial-gradient(58% 48% at 6% 58%, rgb(0 255 163 / 0.1), transparent 72%),
+    radial-gradient(64% 52% at 92% 66%, rgb(220 31 255 / 0.1), transparent 74%),
+    radial-gradient(72% 46% at 50% 104%, rgb(0 255 163 / 0.08), transparent 74%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat,
+    no-repeat;
+  background-size: 24px 24px, auto, auto, auto, auto, auto;
+  background-attachment: scroll, fixed, fixed, fixed, fixed, fixed;
+}
+
+/* ── Type primitives ─────────────────────────────────────────────────── */
+
+/* Editorial display: serif, tight, always ink. Italic carries the emphasis. */
+.display {
+  font-family: var(--font-display-stack);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+.display em {
+  font-style: italic;
+}
+
+/* Mono metadata line: the printed caption. Carries data, not decoration. */
+.meta {
+  font-family: var(--font-num-stack);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+.num {
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* ── The gradient: money in motion ───────────────────────────────────── */
+
+@keyframes flow {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Flowing fill: primary buttons, the page rail. Exact OG stops. */
+.grad-flow {
+  background-image: linear-gradient(
+    93deg,
+    var(--grad-a),
+    var(--grad-b),
+    var(--grad-a)
+  );
+  background-size: 200% auto;
+  animation: flow 5s linear infinite;
+}
+
+/* Flowing numerals: live balances only. Darkened stops stay legible on white. */
+.grad-num {
+  background-image: linear-gradient(
+    93deg,
+    var(--grad-a-ink),
+    var(--grad-b-ink),
+    var(--grad-a-ink)
+  );
+  background-size: 200% auto;
+  animation: flow 5s linear infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+
+.btn {
+  font-family: var(--font-body-stack);
+  font-size: 0.875rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3rem;
+  padding-inline: 1.625rem;
+  border-radius: 999px;
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease,
+    opacity 0.2s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+
+/* The primary action: mother-of-pearl. The OG hues washed out to pastel and
+   drifting slowly, so the motion reads as sheen on a surface rather than a
+   bar sliding past. The stop list loops (mint → … → mint) so the travel is
+   seamless. Ink text: every stop is light enough to carry it at AAA. */
+.btn-grad {
+  color: #16161c;
+  background-image: linear-gradient(
+    100deg,
+    #b6f2d8 0%,
+    #cfe6fb 17%,
+    #ded0fa 34%,
+    #f8cfe9 50%,
+    #ded0fa 66%,
+    #cfe6fb 83%,
+    #b6f2d8 100%
+  );
+  background-size: 200% auto;
+  animation: flow 9s linear infinite;
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    0 1px 2px rgb(10 10 10 / 0.05),
+    0 12px 28px -16px rgb(150 110 230 / 0.55);
+}
+.btn-grad:hover {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.65),
+    0 1px 2px rgb(10 10 10 / 0.05),
+    0 16px 34px -14px rgb(150 110 230 / 0.7);
+}
+.btn-grad:disabled {
+  animation-play-state: paused;
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ink {
+  background: var(--ink);
+  color: #ffffff;
+}
+.btn-ink:hover {
+  box-shadow: 0 10px 26px -12px rgb(10 10 10 / 0.55);
+}
+
+.btn-ghost {
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  background: var(--bg);
+}
+.btn-ghost:hover {
+  border-color: var(--ink-faint);
+  background: var(--paper);
+}
+
+/* ── Header: a plate that dissolves into the page ────────────────────────
+   The legibility wash and its blur live on a pseudo-element that hangs past
+   the bar and fades to nothing, so there is no edge where the header stops
+   and the page starts. Bar content sits above it, unmasked. */
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+.site-header::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 -2.5rem 0;
+  pointer-events: none;
+  backdrop-filter: blur(16px) saturate(1.15);
+  -webkit-backdrop-filter: blur(16px) saturate(1.15);
+  background: linear-gradient(
+    to bottom,
+    rgb(255 255 255 / 0.82),
+    rgb(255 255 255 / 0.52) 58%,
+    rgb(255 255 255 / 0)
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 40%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(to bottom, #000 0%, #000 40%, transparent 100%);
+}
+.site-header > * {
+  position: relative;
+}
+
+/* ── Glass: the fund panel material ──────────────────────────────────── */
+
+.glass {
+  background: rgb(255 255 255 / 0.55);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgb(255 255 255 / 0.78);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgb(10 10 10 / 0.04),
+    0 24px 64px -32px rgb(10 10 10 / 0.28);
+}
+
+.glass-inset {
+  background: rgb(255 255 255 / 0.55);
+  border: 1px solid rgb(255 255 255 / 0.85);
+  border-radius: 16px;
+}
+
+/* ── Surfaces ────────────────────────────────────────────────────────── */
+
+/* Alternating full-width section tint. Translucent on purpose: the site-wide
+   aurora has to read through it, or the band becomes a seam. */
+.band {
+  background: rgb(250 250 248 / 0.62);
+}
+
+.card {
+  background: var(--bg);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(10 10 10 / 0.04),
+    0 10px 28px -18px rgb(10 10 10 / 0.12);
+}
+
+/* Green pill for live gains / TVL, Instinct-style. */
+.pill-pos {
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  background: rgb(11 160 95 / 0.09);
+  color: var(--pos);
+  border-radius: 8px;
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* Weight bars in holdings lists. */
+.weightbar {
+  position: relative;
+  isolation: isolate;
+}
+.weightbar::before {
+  content: "";
+  position: absolute;
+  inset-block: 3px;
+  left: 0;
+  width: var(--w, 0%);
+  border-radius: 4px;
+  background: rgb(10 10 10 / 0.05);
+  z-index: -1;
+}
+
+/* ── Motion (everything except the gradient is quiet) ────────────────── */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* Read-more panel: animated grid expand, no JS measurement. */
+.expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.expand[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+:where(a, button, [tabindex], summary):focus-visible {
+  outline: 2px solid var(--grad-b);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .rise {
+    opacity: 1;
+    transform: none;
+  }
+  /* Gradient surfaces freeze mid-blend instead of animating. */
+  .grad-flow,
+  .grad-num,
+  .btn-grad {
+    animation: none !important;
+    background-position: 50% center;
+  }
+}

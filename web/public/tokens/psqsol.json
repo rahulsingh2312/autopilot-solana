@@ -1,0 +1,21 @@
+{
+  "name": "Ackman Tracker",
+  "symbol": "psqSOL",
+  "description": "One token tracking Pershing Square's largest 13F positions, renormalized. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "image": "https://autopilot-solana.vercel.app/tokens/psqsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Strategy",
+      "value": "Pershing Square 13F top holdings"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

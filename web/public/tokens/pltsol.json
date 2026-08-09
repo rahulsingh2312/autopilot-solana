@@ -1,0 +1,21 @@
+{
+  "name": "Pelosi Tracker",
+  "symbol": "pltSOL",
+  "description": "One token tracking the disclosed positions of Speaker Emerita Pelosi's household, built from STOCK Act periodic transaction reports. Deposit SOL to mint, burn to redeem any time. Devnet deployment by Autopilot.",
+  "image": "https://autopilot-solana.vercel.app/tokens/pltsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Strategy",
+      "value": "Pelosi STOCK Act disclosures"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "On each new disclosure"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

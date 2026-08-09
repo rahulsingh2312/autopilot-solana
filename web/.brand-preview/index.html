@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solana brand picker — Autopilot</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, "Segoe UI", Inter, sans-serif; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #060608; color: #f5f5f5; }
+    .topbar { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(12px);
+      background: rgba(6,6,8,0.8); border-bottom: 1px solid #222;
+      padding: 16px 24px; }
+    .topbar h1 { margin: 0; font-size: 15px; font-weight: 600; }
+    .topbar .hint { font-size: 13px; opacity: 0.6; margin: 0; }
+    .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 80px; display: grid; gap: 40px; }
+    .palette { border-radius: 16px; overflow: hidden; border: 1px solid #1e1e24;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5); background: var(--bg); color: var(--fg); }
+    .gradbar { height: 4px; }
+    .palette-header { padding: 18px 24px 12px; border-bottom: 1px solid var(--border); }
+    .palette-number { display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 999px; background: var(--primary);
+      color: var(--primary-fg); font-weight: 600; font-size: 13px; margin-right: 12px; }
+    .palette-name { margin: 0; font-size: 20px; font-weight: 600; }
+    .palette-vibe { font-size: 13px; opacity: 0.66; margin: 4px 0 0; font-variant: all-small-caps; letter-spacing: 0.04em; }
+    .swatches { display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px; background: var(--border); }
+    .swatch { aspect-ratio: 2 / 1; position: relative; }
+    .swatch-label { position: absolute; bottom: 0; left: 0; right: 0; padding: 5px 4px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 9px;
+      background: rgba(0,0,0,0.4); color: #fff; text-align: center; }
+    .ui { padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    @media (max-width: 720px) { .ui { grid-template-columns: 1fr; } }
+    .headline { font-size: 27px; font-weight: 650; letter-spacing: -0.02em; margin: 0 0 6px; }
+    .muted { font-size: 12px; margin: 0; color: var(--muted-fg); }
+    .buttons { display: flex; gap: 8px; margin-bottom: 12px; }
+    .btn { font-family: inherit; font-size: 13px; font-weight: 600; padding: 10px 18px;
+      border-radius: 999px; border: 1px solid transparent; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+    .input { width: 100%; font-family: inherit; font-size: 13px; padding: 10px 12px;
+      border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--fg); }
+    .input:focus { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; }
+    .card-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.66; margin: 0 0 6px; }
+    .card-value { font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums;
+      font-size: 24px; font-weight: 600; margin: 0; }
+    .card-sub { font-size: 12px; opacity: 0.72; margin: 4px 0 0; }
+    .contrast { padding: 14px 24px; border-top: 1px solid var(--border); background: var(--card);
+      font-size: 12px; display: flex; gap: 20px; flex-wrap: wrap; }
+    .contrast span::before { content: "✓ "; color: #14F195; font-weight: 700; }
+    .footer-cta { text-align: center; padding: 24px; opacity: 0.72; font-size: 14px; }
+    .footer-cta code { font-family: ui-monospace, Menlo, monospace; background: #1c1c22;
+      padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>Autopilot × exact Solana brand colors</h1>
+    <p class="hint">#9945FF purple · #14F195 green · OG logo gradient #00FFA3→#DC1FFF. Six ways to wear them.</p>
+  </div>
+  <div class="container">
+
+    <article class="palette" style="--bg:#0A0A0D; --fg:#F4F3F7; --card:#131318; --muted-fg:#9A97A5; --border:#26252E; --primary:#9945FF; --primary-fg:#FFFFFF; --pos:#14F195; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">1</span>Solana Prime</h2>
+          <p class="palette-vibe">solana.com itself · black, purple lead, green for wins</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#0A0A0D;"><span class="swatch-label">#0A0A0D</span></div>
+        <div class="swatch" style="background:#131318;"><span class="swatch-label">#131318</span></div>
+        <div class="swatch" style="background:#9945FF;"><span class="swatch-label">#9945FF</span></div>
+        <div class="swatch" style="background:#14F195;"><span class="swatch-label">#14F195</span></div>
+        <div class="swatch" style="background:#F4F3F7;"><span class="swatch-label">#F4F3F7</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;"><span style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%); -webkit-background-clip:text; background-clip:text; color:transparent;">1.043 SOL</span> <span style="font-size:14px; color:#14F195; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:#9945FF; color:#FFFFFF; border-color:#9945FF;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#14F195;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 17.9:1</span>
+        <span>Primary 4.4:1</span>
+        <span>Button text 4.5:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <article class="palette" style="--bg:#08090A; --fg:#F2F6F4; --card:#101314; --muted-fg:#93A09A; --border:#22282A; --primary:#14F195; --primary-fg:#04140C; --pos:#14F195; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">2</span>Ghost Green</h2>
+          <p class="palette-vibe">green leads · terminal glow, purple in reserve</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#08090A;"><span class="swatch-label">#08090A</span></div>
+        <div class="swatch" style="background:#101314;"><span class="swatch-label">#101314</span></div>
+        <div class="swatch" style="background:#14F195;"><span class="swatch-label">#14F195</span></div>
+        <div class="swatch" style="background:#14F195;"><span class="swatch-label">#14F195</span></div>
+        <div class="swatch" style="background:#F2F6F4;"><span class="swatch-label">#F2F6F4</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;">1.043 SOL <span style="font-size:14px; color:#14F195; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:#14F195; color:#04140C; border-color:#14F195;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#14F195;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 18.3:1</span>
+        <span>Primary 13.3:1</span>
+        <span>Button text 12.6:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <article class="palette" style="--bg:#050507; --fg:#F5F4F8; --card:#101014; --muted-fg:#9C99A8; --border:#242330; --primary:#9945FF; --primary-fg:#FFFFFF; --pos:#14F195; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">3</span>Gradient Maximal</h2>
+          <p class="palette-vibe">the full gradient, everywhere it earns it</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#050507;"><span class="swatch-label">#050507</span></div>
+        <div class="swatch" style="background:#101014;"><span class="swatch-label">#101014</span></div>
+        <div class="swatch" style="background:#9945FF;"><span class="swatch-label">#9945FF</span></div>
+        <div class="swatch" style="background:#14F195;"><span class="swatch-label">#14F195</span></div>
+        <div class="swatch" style="background:#F5F4F8;"><span class="swatch-label">#F5F4F8</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;"><span style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%); -webkit-background-clip:text; background-clip:text; color:transparent;">1.043 SOL</span> <span style="font-size:14px; color:#14F195; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%); color:#0B0812; border:none;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#14F195;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 18.6:1</span>
+        <span>Primary 4.5:1</span>
+        <span>Button text 4.5:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <article class="palette" style="--bg:#09070C; --fg:#F5F3F8; --card:#120F17; --muted-fg:#9E9AAB; --border:#272232; --primary:#DC1FFF; --primary-fg:#16041C; --pos:#00FFA3; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #00FFA3 0%, #DC1FFF 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">4</span>OG Logo</h2>
+          <p class="palette-vibe">the original logo gradient · aqua to magenta</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#09070C;"><span class="swatch-label">#09070C</span></div>
+        <div class="swatch" style="background:#120F17;"><span class="swatch-label">#120F17</span></div>
+        <div class="swatch" style="background:#DC1FFF;"><span class="swatch-label">#DC1FFF</span></div>
+        <div class="swatch" style="background:#00FFA3;"><span class="swatch-label">#00FFA3</span></div>
+        <div class="swatch" style="background:#F5F3F8;"><span class="swatch-label">#F5F3F8</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #00FFA3 0%, #DC1FFF 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;"><span style="background:linear-gradient(93deg, #00FFA3 0%, #DC1FFF 100%); -webkit-background-clip:text; background-clip:text; color:transparent;">1.043 SOL</span> <span style="font-size:14px; color:#00FFA3; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:linear-gradient(93deg, #00FFA3 0%, #DC1FFF 100%); color:#0B0812; border:none;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#00FFA3;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 18.2:1</span>
+        <span>Primary 5.4:1</span>
+        <span>Button text 5.3:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <article class="palette" style="--bg:#0D0A14; --fg:#F4F1FA; --card:#171226; --muted-fg:#A29BB8; --border:#2B2440; --primary:#A964FF; --primary-fg:#140A24; --pos:#14F195; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">5</span>Dusk Purple</h2>
+          <p class="palette-vibe">purple-tinted black · glassy, quieter gradient washes</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#0D0A14;"><span class="swatch-label">#0D0A14</span></div>
+        <div class="swatch" style="background:#171226;"><span class="swatch-label">#171226</span></div>
+        <div class="swatch" style="background:#A964FF;"><span class="swatch-label">#A964FF</span></div>
+        <div class="swatch" style="background:#14F195;"><span class="swatch-label">#14F195</span></div>
+        <div class="swatch" style="background:#F4F1FA;"><span class="swatch-label">#F4F1FA</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;">1.043 SOL <span style="font-size:14px; color:#14F195; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:#A964FF; color:#140A24; border-color:#A964FF;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#14F195;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 17.6:1</span>
+        <span>Primary 5.6:1</span>
+        <span>Button text 5.4:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <article class="palette" style="--bg:#FBFAFC; --fg:#151318; --card:#FFFFFF; --muted-fg:#6E6A78; --border:#E6E3EC; --primary:#7C2BFF; --primary-fg:#FFFFFF; --pos:#0BA06A; --radius:12px;">
+      <div class="gradbar" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"></div>
+      <header class="palette-header">
+        <div>
+          <h2 class="palette-name"><span class="palette-number">6</span>Solana Paper</h2>
+          <p class="palette-vibe">the one light take · ink on white, gradient as signature</p>
+        </div>
+      </header>
+      <div class="swatches">
+        <div class="swatch" style="background:#FBFAFC;"><span class="swatch-label">#FBFAFC</span></div>
+        <div class="swatch" style="background:#FFFFFF;"><span class="swatch-label">#FFFFFF</span></div>
+        <div class="swatch" style="background:#7C2BFF;"><span class="swatch-label">#7C2BFF</span></div>
+        <div class="swatch" style="background:#0BA06A;"><span class="swatch-label">#0BA06A</span></div>
+        <div class="swatch" style="background:#151318;"><span class="swatch-label">#151318</span></div>
+        <div class="swatch" style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%);"><span class="swatch-label">gradient</span></div>
+      </div>
+      <div class="ui">
+        <div>
+          <p class="muted" style="margin-bottom:6px; text-transform:uppercase; letter-spacing:0.14em; font-size:10px;">icSOL · Inverse Cramer Index</p>
+          <h3 class="headline" style="font-family:ui-monospace,monospace; font-variant-numeric:tabular-nums;"><span style="background:linear-gradient(93deg, #9945FF 0%, #14F195 100%); -webkit-background-clip:text; background-clip:text; color:transparent;">1.043 SOL</span> <span style="font-size:14px; color:#0BA06A; font-weight:600;">▲ 4.3%</span></h3>
+          <p class="muted">Vault TVL 4,210 SOL · read live from devnet</p>
+          <div class="buttons" style="margin-top:18px;">
+            <button class="btn" style="background:#7C2BFF; color:#FFFFFF; border-color:#7C2BFF;">Deposit SOL</button>
+            <button class="btn btn-secondary">Redeem</button>
+          </div>
+          <input class="input" placeholder="Amount in SOL" />
+        </div>
+        <div class="card">
+          <p class="card-label">Your position</p>
+          <p class="card-value">12.480 icSOL</p>
+          <p class="card-sub">≈ 13.02 SOL · <span style="color:#0BA06A;">+0.54 SOL</span> since deposit</p>
+          <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+            <p class="card-label">Top holding</p>
+            <p class="card-value" style="font-size:15px;">NVDA · 25.0%</p>
+            <p class="card-sub">NVDAx · tokenized via xStocks</p>
+          </div>
+        </div>
+      </div>
+      <div class="contrast">
+        <span>Body 17.7:1</span>
+        <span>Primary 5.5:1</span>
+        <span>Button text 5.8:1</span>
+        <span>AA</span>
+      </div>
+    </article>
+    <div class="footer-cta">
+      Pick one: type <code>1</code> through <code>6</code>.<br />
+      Or steer: <code>more like 3 but quieter</code> · <code>none</code>.
+    </div>
+  </div>
+</body>
+</html>

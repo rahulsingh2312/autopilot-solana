@@ -1,0 +1,422 @@
+@import "tailwindcss";
+
+/*
+ * AUTOPILOT AIR.
+ *
+ * One committed world: an airline, in daylight. The page is a terminal wall,
+ * tracker cards are boarding passes, the ticker is a departure board, the buy
+ * flow is check-in. Paper white ground, black signage type, international
+ * orange as the single brand accent. Numbers always mono, always tabular.
+ */
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-sky: var(--sky);
+  --color-ink: var(--ink);
+  --color-muted: var(--ink-muted);
+  --color-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-pos: var(--pos);
+  --color-neg: var(--neg);
+  --color-board: var(--board);
+  --color-board-glow: var(--board-glow);
+
+  --font-display: var(--font-display-stack);
+  --font-body: var(--font-body-stack);
+  --font-num: var(--font-num-stack);
+}
+
+:root {
+  --bg: #f6f5f1;
+  --card: #ffffff;
+  --sky: #e8f1fa;
+  --ink: #12141a;
+  --ink-muted: #5b6572;
+  --ink-faint: #9aa2ad;
+  --rule: #e4e3dc;
+  --rule-strong: #c9c8bf;
+  --accent: #ff4f12;
+  --pos: #0c8f4d;
+  --neg: #d2372c;
+  --board: #101613;
+  --board-glow: #ffcf6b;
+
+  --font-display-stack: var(--font-grotesk), system-ui, sans-serif;
+  --font-body-stack: var(--font-inter), system-ui, sans-serif;
+  --font-num-stack: var(--font-plex-mono), ui-monospace, monospace;
+}
+
+html {
+  background: var(--bg);
+  color-scheme: light;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body-stack);
+  font-size: 1rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Primitives ──────────────────────────────────────────────────────── */
+
+/* Signage: bold, geometric, friendly. */
+.display {
+  font-family: var(--font-display-stack);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.02;
+  text-wrap: balance;
+}
+
+.eyebrow {
+  font-family: var(--font-num-stack);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--accent);
+}
+
+.num {
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+.figure {
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  font-weight: 600;
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+/* Field label, like the printed captions on a ticket. */
+.field-label {
+  font-family: var(--font-num-stack);
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--ink-faint);
+}
+
+/* ── Paper ───────────────────────────────────────────────────────────── */
+
+.panel {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgb(18 20 26 / 0.05),
+    0 8px 24px -12px rgb(18 20 26 / 0.1);
+}
+
+/* A boarding pass: paper, a crisper shadow, a slight lift on hover. */
+.pass {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  box-shadow:
+    0 1px 2px rgb(18 20 26 / 0.06),
+    0 16px 40px -20px rgb(18 20 26 / 0.18);
+  transition:
+    transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.35s ease;
+}
+.pass:hover {
+  transform: translateY(-6px) rotate(-0.3deg);
+  box-shadow:
+    0 2px 4px rgb(18 20 26 / 0.06),
+    0 28px 56px -24px rgb(18 20 26 / 0.28);
+}
+
+/* The perforation between ticket and stub: notches + dashed tear line. */
+.perf {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed var(--rule-strong);
+  margin-inline: 10px;
+}
+.perf::before,
+.perf::after {
+  content: "";
+  position: absolute;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1px solid var(--rule);
+}
+.perf::before {
+  left: -22px;
+}
+.perf::after {
+  right: -22px;
+}
+
+/* A CSS barcode. Decorative, aria-hidden at the call site. */
+.barcode {
+  height: 34px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--ink) 0 2px,
+    transparent 2px 4px,
+    var(--ink) 4px 5px,
+    transparent 5px 9px,
+    var(--ink) 9px 12px,
+    transparent 12px 14px,
+    var(--ink) 14px 15px,
+    transparent 15px 17px
+  );
+}
+
+/* ── Buttons: signage pills ──────────────────────────────────────────── */
+
+.btn {
+  font-family: var(--font-num-stack);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: 3rem;
+  padding-inline: 1.5rem;
+  border-radius: 999px;
+  transition:
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.25s ease,
+    background-color 0.2s ease,
+    opacity 0.2s ease;
+}
+.btn:active {
+  transform: scale(0.97);
+}
+.btn-primary {
+  background: var(--ink);
+  color: var(--card);
+}
+.btn-primary:hover {
+  box-shadow: 0 12px 28px -12px rgb(18 20 26 / 0.5);
+}
+.btn-accent {
+  background: var(--accent);
+  color: #ffffff;
+}
+.btn-accent:hover {
+  box-shadow: 0 12px 28px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.btn-ghost {
+  border: 1px solid var(--rule-strong);
+  color: var(--ink);
+  background: transparent;
+}
+.btn-ghost:hover {
+  background: var(--card);
+  border-color: var(--ink-faint);
+}
+
+/* ── The sky: hero backdrop ──────────────────────────────────────────── */
+
+.sky-wash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 120% 90% at 50% -30%, var(--sky) 0%, transparent 65%),
+    var(--bg);
+}
+
+/* Status lamp. */
+.lamp {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--pos);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--pos) 18%, transparent);
+  animation: lamp-pulse 2.4s ease-in-out infinite;
+}
+.lamp[data-off="true"] {
+  background: var(--ink-faint);
+  box-shadow: none;
+  animation: none;
+}
+@keyframes lamp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ── Portraits: printed photo on the pass ────────────────────────────── */
+
+.portrait-frame {
+  position: relative;
+  overflow: hidden;
+}
+.portrait-frame img {
+  filter: saturate(0.92) contrast(1.03);
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pass:hover .portrait-frame img {
+  transform: scale(1.03);
+}
+/* Soft print-grade toward the tracker's stamp color. */
+.portrait-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tracker-accent) 10%, transparent) 0%,
+    transparent 45%
+  );
+}
+
+/* Weight bars on the manifest. */
+.weightbar {
+  position: relative;
+  isolation: isolate;
+}
+.weightbar::before {
+  content: "";
+  position: absolute;
+  inset-block: 3px;
+  left: 0;
+  width: var(--w, 0%);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tracker-accent, var(--accent)) 12%, transparent);
+  z-index: -1;
+}
+
+/* ── The departure board ─────────────────────────────────────────────── */
+
+.led-rail {
+  background: var(--board);
+  color: var(--board-glow);
+  font-family: var(--font-num-stack);
+  font-variant-numeric: tabular-nums;
+  border-block: 1px solid #000;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--board-glow) 45%, transparent);
+}
+.led-rail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgb(0 0 0 / 0.35) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ── Motion ──────────────────────────────────────────────────────────── */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--delay, 0ms);
+}
+
+.marquee-track {
+  animation: marquee var(--marquee-duration, 40s) linear infinite;
+}
+
+:where(a, button, [tabindex], summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--ink);
+  color: var(--card);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .rise {
+    opacity: 1;
+    transform: none;
+  }
+  .marquee-track {
+    animation: none;
+  }
+}
+
+/* ── Tracker list rows ───────────────────────────────────────────────── */
+
+/* Squircle avatar: soft gradient ground that drifts slowly. */
+.tile {
+  background: linear-gradient(135deg, var(--tile-a), var(--tile-b));
+  background-size: 180% 180%;
+  animation: tile-drift 9s ease-in-out infinite alternate;
+}
+@keyframes tile-drift {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 100% 100%;
+  }
+}
+.tile img {
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.group:hover .tile img {
+  transform: scale(1.06);
+}
+
+/* Read-more panel: animated grid expand, no JS measurement. */
+.expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.expand[data-open="true"] {
+  grid-template-rows: 1fr;
+}
