@@ -30,9 +30,9 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
-const title = `${BRAND.name}: famous portfolios, one token`;
+const title = `${BRAND.name}: trade the trader, not the market`;
 const description =
-  "Deposit SOL, get one token that tracks a famous investor's disclosed portfolio. Burn it for SOL any time. No brokerage account, no market hours.";
+  "Seven tracker tokens on Solana. Deposit SOL, hold one token that follows a famous investor's disclosed holdings, and burn it back for SOL at NAV whenever you want. Every balance on the page is read live from the chain.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(`https://${BRAND.domain}`),
@@ -51,6 +51,14 @@ export const metadata: Metadata = {
     description,
     images: ["/og.png"],
   },
+  keywords: [
+    "Solana",
+    "tokenized equities",
+    "xStocks",
+    "13F tracker",
+    "copy trading",
+    "on-chain index",
+  ],
   icons: { icon: "/icon.svg" },
   other: { "solana:cluster": CLUSTER },
 };

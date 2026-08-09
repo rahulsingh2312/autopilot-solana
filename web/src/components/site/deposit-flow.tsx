@@ -81,7 +81,7 @@ export function DepositFlow({ pinned }: { pinned?: string } = {}) {
       <Tile label="You deposit" caption="SOL">
         {/* SolMark sizes itself to the surrounding text (h-[0.66em]), which
             beats any h-* class passed in. Drive it with font-size instead. */}
-        <span className="text-[62px] leading-none sm:text-[70px]">
+        <span className="flex text-[62px] leading-none sm:text-[70px]">
           <SolMark />
         </span>
       </Tile>
