@@ -165,6 +165,71 @@ const TRACKERS = [
       { symbol: "QSR", weightBps: 1800 },
     ],
   },
+  {
+    // Fees are parts per million despite the field name: 10 ppm is 0.001%,
+    // matching every tracker already live rather than the 50 the older
+    // entries were created with and later corrected by set-fees.
+    ticker: "mg7SOL",
+    name: "Magnificent Seven",
+    depositFeeBps: 10,
+    redeemFeeBps: 10,
+    rebalanceInterval: 7_776_000,
+    filingDelayDays: 0,
+    legs: [
+      { symbol: "NVDAx", weightBps: 1429 },
+      { symbol: "MSFTx", weightBps: 1429 },
+      { symbol: "AAPLx", weightBps: 1429 },
+      { symbol: "AMZNx", weightBps: 1429 },
+      { symbol: "GOOGLx", weightBps: 1428 },
+      { symbol: "METAx", weightBps: 1428 },
+      { symbol: "TSLAx", weightBps: 1428 },
+    ],
+  },
+  {
+    ticker: "aiSOL",
+    name: "AI Infrastructure",
+    depositFeeBps: 10,
+    redeemFeeBps: 10,
+    rebalanceInterval: 7_776_000,
+    filingDelayDays: 0,
+    legs: [
+      { symbol: "NVDAx", weightBps: 2500 },
+      { symbol: "AVGOx", weightBps: 2500 },
+      { symbol: "MSFTx", weightBps: 2500 },
+      { symbol: "PLTRx", weightBps: 2500 },
+    ],
+  },
+  {
+    ticker: "rdSOL",
+    name: "Bridgewater Tracker",
+    depositFeeBps: 10,
+    redeemFeeBps: 10,
+    rebalanceInterval: 7_776_000,
+    filingDelayDays: 45,
+    legs: [
+      { symbol: "SPYx", weightBps: 3810 },
+      { symbol: "IVV", weightBps: 2340 },
+      { symbol: "AMZNx", weightBps: 1220 },
+      { symbol: "NVDAx", weightBps: 1100 },
+      { symbol: "GOOGLx", weightBps: 770 },
+      { symbol: "AVGOx", weightBps: 760 },
+    ],
+  },
+  {
+    ticker: "dtSOL",
+    name: "Tepper Tracker",
+    depositFeeBps: 10,
+    redeemFeeBps: 10,
+    rebalanceInterval: 7_776_000,
+    filingDelayDays: 45,
+    legs: [
+      { symbol: "AMZNx", weightBps: 3140 },
+      { symbol: "MUx", weightBps: 1960 },
+      { symbol: "GOOG", weightBps: 1740 },
+      { symbol: "UBERx", weightBps: 1590 },
+      { symbol: "TSMx", weightBps: 1570 },
+    ],
+  },
 ];
 
 const utf8 = new TextEncoder();

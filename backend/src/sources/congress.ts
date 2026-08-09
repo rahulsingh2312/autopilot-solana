@@ -76,7 +76,7 @@ const isPurchase = (transaction: string) => /purchase|buy/i.test(transaction);
 const isSale = (transaction: string) => /sale|sold|sell|exchange/i.test(transaction);
 
 /** How far back a trade still counts toward a reconstructed position. */
-const LOOKBACK_DAYS = 730;
+const LOOKBACK_DAYS = 1095;
 
 async function quiverFetch(path: string): Promise<QuiverTrade[]> {
   if (!env.quiverApiKey) throw new Error("QUIVER_API_KEY is not set");
@@ -371,7 +371,11 @@ async function fetchFromHouseClerk(
   tracker: TrackerBinding,
 ): Promise<Filing | null> {
   const year = new Date().getUTCFullYear();
-  const years = [year, year - 1];
+  // Three calendar years, not two. A book reconstructed from transactions is
+  // only as wide as the filings behind it, and a filer who trades rarely can
+  // net to a handful of positions over two years — too few to fill a basket
+  // once untokenized names are filtered out.
+  const years = [year, year - 1, year - 2];
   // No member bound means the aggregate tracker: every filer, not one.
   const aggregate = !tracker.memberLast;
 

@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 /**
  * The mint's own artwork for a tracker token.
  *
@@ -27,11 +31,19 @@ export function TokenIcon({
   className?: string;
 }) {
   const slug = ticker.toLowerCase();
+  // The two sets are maintained by hand and drift: a tracker added with its
+  // halftone but no headshot rendered the browser's broken-image glyph next to
+  // its ticker. The halftone is the one file guaranteed to exist for every
+  // mint, so it catches the fall — illegible at 18px, but a grey disc reads as
+  // a coin where a torn page icon reads as a bug.
+  const [headshotMissing, setHeadshotMissing] = useState(false);
   const src =
-    size >= HALFTONE_MIN ? `/tokens/${slug}.png` : `/avatars/${slug}.png`;
+    size >= HALFTONE_MIN || headshotMissing
+      ? `/tokens/${slug}.png`
+      : `/avatars/${slug}.png`;
 
   return (
-    // A 7-file static set at icon size: the optimizer would cost a round trip
+    // A static set at icon size: the optimizer would cost a round trip
     // to save nothing.
     // eslint-disable-next-line @next/next/no-img-element
     <img
@@ -41,6 +53,7 @@ export function TokenIcon({
       height={size}
       loading="lazy"
       decoding="async"
+      onError={() => setHeadshotMissing(true)}
       className={`inline-block shrink-0 rounded-full align-[-0.18em] ${className}`}
       style={{ width: size, height: size }}
     />

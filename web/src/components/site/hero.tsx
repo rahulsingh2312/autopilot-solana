@@ -102,7 +102,7 @@ function PortraitCycle({
   if (!current) return null;
 
   return (
-    <figure className="flex flex-col items-end gap-3 lg:sticky lg:top-28">
+    <figure className="flex w-full min-w-0 flex-col items-end gap-3 lg:sticky lg:top-28">
       {/* Same canvas, new src: the dots morph in place, no blank frame. */}
       <Halftone
         src={current.src}
@@ -267,7 +267,7 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
   }, [tracker.ticker]);
 
   return (
-    <div className="glass flex flex-col gap-4 p-5 sm:p-6">
+    <div className="glass flex flex-col gap-4 p-4 sm:p-6">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1.5">
           <h1
@@ -305,7 +305,7 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
       <div className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-3">
       {tracker.legs.length > 0 ? (
-        <div className="glass-inset flex flex-col gap-2 p-3.5">
+        <div className="glass-inset flex flex-col gap-2 p-3 sm:p-3.5">
           <div className="flex items-baseline justify-between gap-3">
             <span className="meta">Holdings</span>
             {prices.tokenizedCount > 0 ? (
@@ -342,7 +342,7 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
             {legs.map((leg) => (
               <li
                 key={leg.symbol}
-                className="weightbar flex items-center gap-2.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0"
+                className="weightbar flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0 sm:flex-nowrap sm:gap-x-2.5"
                 style={
                   {
                     "--w": `${(leg.weightBps / maxWeight) * 100}%`,
@@ -350,10 +350,10 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
                 }
               >
                 <TokenMark symbol={leg.symbol} asset={xstocks[leg.symbol]} />
-                <span className="num w-14 shrink-0 font-semibold text-ink">
+                <span className="num w-12 shrink-0 font-semibold text-ink sm:w-14">
                   {leg.tokenized ? leg.xstock : leg.symbol}
                 </span>
-                <span className="flex-1 truncate text-faint">
+                <span className="min-w-0 flex-1 truncate text-faint">
                   {leg.company}
                 </span>
                 {(() => {
@@ -362,25 +362,28 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
                     : undefined;
                   if (!quote) return null;
                   return (
+                    // The per-leg 24h move is the first thing to go on a narrow
+                    // screen: price and weight both carry more, and the row's
+                    // fixed columns otherwise floor it wider than the phone.
                     <span className="flex shrink-0 items-baseline gap-1.5">
                       <span className="num tabular-nums text-ink">
                         {formatUsdPrice(quote.usdPrice)}
                       </span>
                       {quote.change24h !== null ? (
                         <span
-                          className={`num w-14 text-right text-[0.6875rem] tabular-nums ${
+                          className={`num hidden w-14 text-right text-[0.6875rem] tabular-nums sm:block ${
                             quote.change24h >= 0 ? "text-pos" : "text-neg"
                           }`}
                         >
                           {formatChange(quote.change24h)}
                         </span>
                       ) : (
-                        <span className="w-14" />
+                        <span className="hidden w-14 sm:block" />
                       )}
                     </span>
                   );
                 })()}
-                <span className="num w-14 shrink-0 text-right tabular-nums text-muted">
+                <span className="num w-12 shrink-0 text-right tabular-nums text-muted sm:w-14">
                   {formatWeight(leg.weightBps)}
                 </span>
               </li>
@@ -571,7 +574,7 @@ export function Hero() {
              default stretch then pulls the backtest out to the same edges —
              so the two read as one stacked unit instead of a card parked
              under a picture. */
-          className="rise mx-auto flex w-fit flex-col gap-6 lg:mx-0 lg:ml-auto lg:self-center"
+          className="rise mx-auto flex w-full min-w-0 flex-col gap-6 lg:mx-0 lg:ml-auto lg:w-fit lg:self-center"
           style={{ "--delay": "150ms" } as React.CSSProperties}
         >
           <PortraitCycle pinned={selected} index={index} />

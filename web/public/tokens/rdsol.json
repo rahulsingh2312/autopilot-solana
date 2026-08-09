@@ -1,0 +1,33 @@
+{
+  "name": "Bridgewater Tracker",
+  "symbol": "rdSOL",
+  "description": "The biggest hedge fund on earth, and most of its disclosed stock book is an index fund. Deposit SOL to mint rdSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and rdSOL holdings update when it changes. Holdings: SPY, IVV, AMZN, NVDA, GOOGL, AVGO. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/rdsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Tracks",
+      "value": "Bridgewater"
+    },
+    {
+      "trait_type": "Source",
+      "value": "SEC Form 13F-HR, Bridgewater Associates, Q1 2026"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly, on each 13F"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "Up to 45 days after quarter end"
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "6"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

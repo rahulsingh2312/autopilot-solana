@@ -55,7 +55,7 @@ function TrailingYear({ tracker }: { tracker: TrackerConfig }) {
 /** Small halftone avatar; falls back to the ticker in mono when no portrait. */
 function Avatar({ tracker }: { tracker: TrackerConfig }) {
   return (
-    <div className="relative grid h-20 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl border border-rule bg-paper sm:h-24 sm:w-24">
+    <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-2xl border border-rule bg-paper sm:h-24 sm:w-24">
       {tracker.portrait ? (
         <Halftone
           src={tracker.portrait}
@@ -100,7 +100,7 @@ export function TrackerRow({
       <button
         onClick={() => select(tracker.ticker)}
         aria-label={`Open ${tracker.name}`}
-        className="group flex w-full items-center gap-5 px-4 py-5 text-left transition-colors hover:bg-paper sm:gap-6 sm:px-6"
+        className="group flex w-full items-center gap-3 px-4 py-5 text-left transition-colors hover:bg-paper sm:gap-6 sm:px-6"
       >
         <Avatar tracker={tracker} />
 
@@ -153,7 +153,7 @@ export function TrackerRow({
         <svg
           aria-hidden
           viewBox="0 0 24 24"
-          className="h-5 w-5 shrink-0 text-faint transition-transform duration-300 group-hover:-translate-y-0.5"
+          className="hidden h-5 w-5 shrink-0 text-faint transition-transform duration-300 group-hover:-translate-y-0.5 sm:block"
           fill="none"
         >
           <path

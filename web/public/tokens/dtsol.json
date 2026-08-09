@@ -1,0 +1,33 @@
+{
+  "name": "Tepper Tracker",
+  "symbol": "dtSOL",
+  "description": "Thirty-one positions. He does not hedge his opinions with diversification. Deposit SOL to mint dtSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and dtSOL holdings update when it changes. Holdings: AMZN, MU, GOOG, UBER, TSM. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/dtsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Tracks",
+      "value": "David Tepper"
+    },
+    {
+      "trait_type": "Source",
+      "value": "SEC Form 13F-HR, Appaloosa LP, Q1 2026"
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly, on each 13F"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "Up to 45 days after quarter end"
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "5"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

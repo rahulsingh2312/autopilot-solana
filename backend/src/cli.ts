@@ -14,7 +14,7 @@
 import { env } from "./env.ts";
 import { errText } from "./log.ts";
 import { approvePending, describeChanges, runCycle } from "./pipeline.ts";
-import { readTrackerState } from "./chain/state.ts";
+import { readTrackerState, readAllTrackerStates } from "./chain/state.ts";
 import { TRACKER_BINDINGS, getBinding } from "./trackers.ts";
 import { pendingPlan } from "./store/db.ts";
 import { getSettings } from "./store/settings.ts";
@@ -162,7 +162,72 @@ async function cmdTradable() {
   );
 }
 
+/**
+ * Every leg of every deployed tracker, checked against what Jupiter can
+ * actually price and route.
+ *
+ * "Tokenized" and "tradable" are different claims and the cards only make the
+ * first one. This is the second: a leg with no route cannot be bought at any
+ * size, and a leg with a few hundred dollars of depth cannot be bought at ours.
+ */
+async function cmdAudit() {
+  const { loadDirectory } = await import("./mapping/xstocks.ts");
+  const directory = await loadDirectory();
+  const states = await readAllTrackerStates(TRACKER_BINDINGS.map((b) => b.ticker));
+
+  const wanted = new Map<string, string>(); // symbol -> mint
+  for (const state of states.values())
+    for (const leg of state.account.legs) {
+      const asset = directory[underlyingOf(leg.symbol)];
+      if (asset?.mint) wanted.set(leg.symbol, asset.mint);
+    }
+
+  const liq = new Map<string, number>();
+  const entries = [...wanted.entries()];
+  for (let i = 0; i < entries.length; i += 50) {
+    const chunk = entries.slice(i, i + 50);
+    const r = await fetch(
+      `https://lite-api.jup.ag/price/v3?ids=${chunk.map(([, m]) => m).join(",")}`,
+      { headers: { accept: "application/json" } },
+    );
+    if (!r.ok) continue;
+    const body = (await r.json()) as Record<string, { usdPrice?: number; liquidity?: number }>;
+    for (const [sym, mint] of chunk) {
+      const e = body[mint];
+      if (typeof e?.usdPrice === "number") liq.set(sym, e.liquidity ?? 0);
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  const usd = (v: number) => `$${Math.round(v).toLocaleString()}`;
+  for (const binding of TRACKER_BINDINGS) {
+    const state = states.get(binding.ticker);
+    if (!state) continue;
+    let routable = 0;
+    let deep = 0;
+    const bad: string[] = [];
+    for (const leg of state.account.legs) {
+      const l = liq.get(leg.symbol);
+      if (l === undefined) { bad.push(`${leg.symbol}:none`); continue; }
+      routable += leg.weightBps;
+      if (l > 50_000) deep += leg.weightBps;
+      else bad.push(`${leg.symbol}:${usd(l)}`);
+    }
+    console.log(
+      `${binding.ticker.padEnd(8)} legs ${String(state.account.legs.length).padStart(2)}  ` +
+        `routable ${(routable / 100).toFixed(0).padStart(3)}%  ` +
+        `>50k ${(deep / 100).toFixed(0).padStart(3)}%`,
+    );
+    if (bad.length) console.log(`         thin/none: ${bad.join(" ")}`);
+  }
+}
+
+/** NVDAx -> NVDA. Backed's convention is a trailing lowercase x. */
+const underlyingOf = (symbol: string) =>
+  (symbol.endsWith("x") ? symbol.slice(0, -1) : symbol).toUpperCase();
+
 const COMMANDS: Record<string, () => Promise<void>> = {
+  audit: cmdAudit,
   tradable: cmdTradable,
   ingest: cmdIngest,
   plan: cmdPlan,

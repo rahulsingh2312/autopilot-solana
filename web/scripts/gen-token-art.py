@@ -48,6 +48,11 @@ SRC_RING = 20
 #   ticker -> (portrait file, (centre x, centre y, zoom) in 0..1)
 PORTRAIT_OVERRIDES = {
     "mbtSOL": ("burry.jpg", (0.48, 0.11, 0.42)),
+    # Both already cropped square to head-and-shoulders when they were pulled
+    # from Wikimedia, so the focus barely moves — a shade up, a shade in, to
+    # sit the eyeline where the other tokens carry it.
+    "rdSOL": ("dalio.jpg", (0.50, 0.46, 0.94)),
+    "dtSOL": ("tepper.jpg", (0.50, 0.46, 0.94)),
 }
 INK = (10, 10, 10)
 

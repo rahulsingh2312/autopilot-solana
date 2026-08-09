@@ -2,18 +2,8 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 
 import { Providers } from "./providers";
-import { Intro } from "@/components/site/intro";
 import { BRAND, CLUSTER } from "@/lib/config";
 import "./globals.css";
-
-/**
- * Decides whether the cold open plays, during HTML parsing and before the
- * first paint. It has to run here rather than in the component: matchMedia
- * doesn't exist on the server, so anything that waits for hydration paints the
- * site first and drops a splash on top of it. Keep the condition identical to
- * shouldPlay() in components/site/intro.tsx.
- */
-const INTRO_FLAG = `(function(){try{if(!matchMedia("(prefers-reduced-motion: reduce)").matches)document.documentElement.dataset.intro=""}catch(e){}})()`;
 
 /**
  * Three faces: Instrument Serif carries the editorial headlines, Inter is the
@@ -77,19 +67,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${display.variable} ${body.variable} ${mono.variable} h-full`}
-      suppressHydrationWarning
     >
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: INTRO_FLAG }} />
-        {/* The clip is only requested once the Intro component mounts, which
-            is after the bundle downloads and hydrates — long enough that a
-            cold visit dismissed the card before a single frame had decoded,
-            showing the poster and nothing else. Preloading starts the fetch
-            during parse instead, in parallel with the JS. */}
-        <link rel="preload" as="video" href="/intro.mp4" type="video/mp4" />
-      </head>
       <body className="dotgrid flex min-h-full flex-col">
-        <Intro />
         <Providers>{children}</Providers>
       </body>
     </html>

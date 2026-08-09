@@ -39,50 +39,23 @@ const SITE = "https://autopilot-solana.vercel.app";
 
 const SET_METADATA_DISC = new Uint8Array([218, 126, 122, 193, 220, 149, 103, 39]);
 
-const TOKENS = [
-  {
-    ticker: "mbtSOL",
-    name: "Michael Burry Tracker",
-    symbol: "mbtSOL",
-    uri: `${SITE}/tokens/mbtsol.json`,
-  },
-  {
-    ticker: "icSOL",
-    name: "Inverse Cramer Index",
-    symbol: "icSOL",
-    uri: `${SITE}/tokens/icsol.json`,
-  },
-  {
-    ticker: "pltSOL",
-    name: "Pelosi Tracker",
-    symbol: "pltSOL",
-    uri: `${SITE}/tokens/pltsol.json`,
-  },
-  {
-    ticker: "cgSOL",
-    name: "Congress Tracker",
-    symbol: "cgSOL",
-    uri: `${SITE}/tokens/cgsol.json`,
-  },
-  {
-    ticker: "bwSOL",
-    name: "Buffett Tracker",
-    symbol: "bwSOL",
-    uri: `${SITE}/tokens/bwsol.json`,
-  },
-  {
-    ticker: "jstSOL",
-    name: "Jim Simons Tracker",
-    symbol: "jstSOL",
-    uri: `${SITE}/tokens/jstsol.json`,
-  },
-  {
-    ticker: "psqSOL",
-    name: "Ackman Tracker",
-    symbol: "psqSOL",
-    uri: `${SITE}/tokens/psqsol.json`,
-  },
-];
+/**
+ * Read straight from config.ts rather than repeated here.
+ *
+ * This list used to be hand-maintained and had already drifted: it still
+ * carried a tracker that had been removed from the product and knew nothing
+ * about two that had been added. A token's on-chain name is the one thing a
+ * wallet shows forever, so it should not depend on someone remembering to
+ * edit a second list.
+ */
+const TOKENS = (
+  await import("../src/lib/config.ts")
+).TRACKERS.map((t) => ({
+  ticker: t.ticker,
+  name: t.name,
+  symbol: t.ticker,
+  uri: `${SITE}/tokens/${t.ticker.toLowerCase()}.json`,
+}));
 
 const utf8 = new TextEncoder();
 const addrEnc = getAddressEncoder();

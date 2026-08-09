@@ -15,7 +15,7 @@
     },
     {
       "trait_type": "Rebalance",
-      "value": "Monthly, on the first trading day"
+      "value": "On each new disclosure"
     },
     {
       "trait_type": "Filing delay",

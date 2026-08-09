@@ -1,0 +1,33 @@
+{
+  "name": "AI Infrastructure",
+  "symbol": "aiSOL",
+  "description": "Not the models. The whole stack underneath them — lithography, foundry, memory, silicon, networking and the clouds renting it out. Deposit SOL to mint aiSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and aiSOL holdings update when it changes. Holdings: NVDA, GOOGL, MSFT, AMZN, META, ORCL, AVGO, AMD, MRVL, INTC, TSM, ASML, MU, SKHY, SNDK, PLTR. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/aisol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
+  "attributes": [
+    {
+      "trait_type": "Tracks",
+      "value": "AI buildout"
+    },
+    {
+      "trait_type": "Source",
+      "value": "Editorial. Curated by Autopilot."
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly, back to equal weight"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "None. There is no filing."
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "16"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
+    }
+  ]
+}

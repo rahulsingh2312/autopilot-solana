@@ -207,7 +207,7 @@ export function TradeForm({
                 reset();
               }
             }}
-            className="num h-12 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-faint"
+            className="num h-12 w-full min-w-0 flex-1 bg-transparent text-lg text-ink outline-none placeholder:text-faint"
           />
           <button
             onClick={() => {

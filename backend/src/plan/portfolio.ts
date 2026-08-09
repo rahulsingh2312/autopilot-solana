@@ -94,7 +94,13 @@ export async function buildTargetPortfolio(
   // batches to answer a question about the top of an already-sorted list.
   // The headroom covers CUSIPs that fail to resolve and share classes that
   // merge into one leg.
-  const candidateCount = Math.min(shares.length, binding.topN * 3 + 10);
+  // Resolve a wider slice when untokenized names will be filtered out later:
+  // the top few dozen by value can be mostly names Backed has never listed,
+  // and truncating first would leave the basket short.
+  const candidateCount = Math.min(
+    shares.length,
+    binding.tokenizedOnly ? binding.topN * 12 + 40 : binding.topN * 3 + 10,
+  );
   const byValue = [...shares].sort((a, b) => b.valueUsd - a.valueUsd);
   const candidates = byValue.slice(0, candidateCount);
 
@@ -139,7 +145,42 @@ export async function buildTargetPortfolio(
     }
   }
 
-  const ranked = [...byTicker.values()].sort((a, b) => b.valueUsd - a.valueUsd);
+  const allRanked = [...byTicker.values()].sort((a, b) => b.valueUsd - a.valueUsd);
+
+  // 2b. Optionally keep only names that exist as an xStock.
+  //
+  // Deliberately off for every tracker. Turning it on makes each card read
+  // "100% tokenized", but only by deleting the holdings that were not — it
+  // removed American Express from a Buffett tracker and took Pelosi from eight
+  // positions to three. A tracker that drops what it cannot tokenize is no
+  // longer tracking the thing it is named after, and the coverage percentage
+  // stops being information and becomes a tautology. Carrying the real weight
+  // in the SOL sleeve and stating the percentage is the honest shape.
+  //
+  // Tested against the directory rather than against `mint`, because on devnet
+  // no leg carries a mint and the filter would empty every basket.
+  const directoryEarly: Record<string, XStockAsset> =
+    binding.tokenizedOnly ? await loadDirectory().catch(() => ({})) : {};
+  const ranked = binding.tokenizedOnly
+    ? allRanked.filter((h) => directoryEarly[h.ticker.toUpperCase()]?.mint)
+    : allRanked;
+
+  if (binding.tokenizedOnly) {
+    const dropped = allRanked.length - ranked.length;
+    const droppedValue = allRanked
+      .filter((h) => !directoryEarly[h.ticker.toUpperCase()]?.mint)
+      .reduce((sum, h) => sum + h.valueUsd, 0);
+    if (dropped > 0) {
+      excluded.push({
+        ticker: `${dropped} untokenized positions`,
+        reason: "No xStock exists for these, so the basket skips to the next name that does",
+        weightBps: Math.round(
+          (droppedValue / Math.max(1, allRanked.reduce((s, h) => s + h.valueUsd, 0))) *
+            WEIGHT_DENOMINATOR,
+        ),
+      });
+    }
+  }
 
   // 3. Truncate to top N.
   const kept = ranked.slice(0, binding.topN);

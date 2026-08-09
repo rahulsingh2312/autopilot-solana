@@ -30,6 +30,16 @@ export function SectionHead({
 }
 
 /**
+ * Rendered per request, because the ranking below is only as good as the data
+ * behind it. Prerendered, this page ran `loadReturnsPayload` on Vercel's
+ * builder, where every Tiingo fetch comes back empty — so the grid shipped
+ * ordered on a map of nulls and stayed that way until the next deploy. The
+ * per-symbol fetch cache in returns-server carries the cost; this only moves
+ * where the payload is read.
+ */
+export const dynamic = "force-dynamic";
+
+/**
  * Funds ordered by trailing-year backtest, best first.
  *
  * Ranked on the server rather than in the browser so the grid does not
@@ -47,10 +57,15 @@ async function rankedTrackers() {
   );
 
   return [...TRACKERS].sort((a, b) => {
-    const left = oneYear.get(a.ticker);
-    const right = oneYear.get(b.ticker);
-    if (left === null || left === undefined) return 1;
-    if (right === null || right === undefined) return -1;
+    const left = oneYear.get(a.ticker) ?? null;
+    const right = oneYear.get(b.ticker) ?? null;
+    // Both unpriced means neither outranks the other. Returning 1 here made
+    // compare(a,b) and compare(b,a) both positive, which is not an ordering —
+    // so when the whole payload was null the "config order at the back"
+    // promise above degraded into an arbitrary shuffle.
+    if (left === null && right === null) return 0;
+    if (left === null) return 1;
+    if (right === null) return -1;
     return right - left;
   });
 }

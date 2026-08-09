@@ -156,6 +156,16 @@ export type TrackerBinding = {
   /** Keep only this many positions, by disclosed value. */
   topN: number;
   /**
+   * Drop names with no tokenized counterpart *before* truncating, so the
+   * basket fills up with holdings the vault can actually own.
+   *
+   * This changes what a tracker claims. Off, it is "the filer's top N" and
+   * some of that weight sits in the SOL sleeve. On, it is "the filer's top N
+   * that exist on chain" — a different, narrower statement, and the card has
+   * to make it. The excluded list reports the difference either way.
+   */
+  tokenizedOnly?: boolean;
+  /**
    * Frozen trackers are ingested for the record but never rebalanced — for a
    * filer that deregistered or was acquired, there is no next filing to track
    * and the product should say so rather than quietly go stale.
