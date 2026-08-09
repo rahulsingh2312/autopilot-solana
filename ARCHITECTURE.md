@@ -35,6 +35,23 @@ account; only who may call `initialize_tracker` would differ.
 Share **supply is the share count**. There is no second copy of it in the
 `Tracker` account that could drift out of sync.
 
+### Two denominators, deliberately separate
+
+```rust
+WEIGHT_DENOMINATOR: u32 = 10_000;    // basket weights, basis points
+FEE_DENOMINATOR:    u64 = 1_000_000; // fees, parts per million
+MAX_FEE_PPM:        u16 = 30_000;    // 3% ceiling, compiled in
+```
+
+These were **one shared constant** until fees moved to ppm. Changing it naively
+would have silently redefined a valid basket as one summing to 1,000,000
+instead of 10,000, invalidating every tracker's weights and breaking
+`rebalance`. Keep them apart.
+
+Fee fields stayed `u16` through that change, which is why the `Tracker` layout
+is byte-identical and no account needed migrating. A 3% cap is 30,000 ppm,
+which still fits.
+
 ### State
 
 ```rust
@@ -42,7 +59,7 @@ Tracker {
   authority, share_mint, fee_recipient,
   ticker, name,                      // ticker is also the PDA seed
   legs: Vec<BasketLeg>,              // max 16
-  deposit_fee_bps, redeem_fee_bps,   // capped at MAX_FEE_BPS = 300
+  deposit_fee_ppm, redeem_fee_ppm,   // capped at MAX_FEE_PPM
   rebalance_interval, last_rebalance_ts, rebalance_count,
   filing_delay_days,
   rent_reserve,                      // excluded from net assets
@@ -63,10 +80,10 @@ that is every leg, because tokenized equities are mainnet-only.
 | `initialize_tracker(args)` | deployer | Creates tracker + share mint + vault, funds the vault to rent exemption and records `rent_reserve`, validates weights sum to exactly 10000 bps |
 | `deposit(lamports_in, min_shares_out)` | anyone | Skims the fee to `fee_recipient`, sends the rest to the vault, mints `net * supply / net_assets` shares (1:1 at genesis so NAV starts at exactly 1.0) |
 | `redeem_for_sol(shares_in, min_lamports_out)` | holder | Burns shares, pays out `net_assets * shares / supply` minus fee. **Works while paused** |
-| `redeem_in_kind(shares_in)` | holder | Burns shares, delivers pro-rata of each tokenized leg via `remaining_accounts` triples (mint, vault ATA, holder ATA) plus the SOL sleeve. Fee is a haircut retained by the vault |
+| `redeem_in_kind(shares_in)` | holder | Burns shares, delivers pro-rata of each tokenized leg via `remaining_accounts` triples (mint, vault ATA, holder ATA) plus the SOL sleeve. Fee is a haircut retained by the vault. **Needs no oracle** |
 | `rebalance(legs)` | authority | Publishes a new basket, bumps `rebalance_count`, emits an event |
 | `set_paused(bool)` | authority | Halts deposits only |
-| `set_fees(deposit, redeem)` | authority | Within the compiled 3% ceiling |
+| `set_fees(deposit_ppm, redeem_ppm)` | authority | Within the compiled 3% ceiling |
 | `set_token_metadata(name, symbol, uri)` | authority | Metaplex CPI. Required because the mint authority is a PDA, so only the program can sign |
 
 ### Safety properties worth knowing
@@ -76,14 +93,12 @@ that is every leg, because tokenized equities are mainnet-only.
   rather than quietly costing the user.
 - **Pausing cannot trap funds.** `set_paused` gates `deposit` only; redemption
   paths never check it.
-- **Fees are capped in the program**, not just the UI. A tracker cannot be
-  reconfigured into a 90% exit tax after deposits land.
-- **Rent reserve is excluded from NAV** and guarded on every payout, so
-  depositor value is never inflated by the vault's own rent.
+- **Fees are capped in the program**, not just the UI.
+- **Rent reserve is excluded from NAV** and guarded on every payout.
 - **u128 intermediate math** (`mul_div`) so a large vault cannot overflow.
 - Freeze authority is deliberately never set.
 
-### Building
+### Building and deploying
 
 ```bash
 cd anchor
@@ -96,107 +111,151 @@ solana program deploy target/deploy/autopilot_vault.so \
 > `platform-tools-sdk/sbf/dependencies/platform-tools` is missing. Symlink it to
 > `~/.cache/solana/v1.52/platform-tools`.
 
+> **Upgrades need ~2.4 SOL transiently** for the deploy buffer, even though it
+> is refunded. The devnet faucet rate-limits hard; redeeming our own tracker
+> shares is a reliable way to reclaim SOL when short.
+
 ---
 
-## 2. The trackers
+## 2. NAV, and the gap before mainnet
 
-Seven vaults, all live on devnet, all seeded with real deposits.
+```
+NAV = (vault lamports − rent_reserve) ÷ share supply
+```
 
-| Ticker | Fund | Source | Rebalance |
+Deposits mint proportionally, so **minting and burning can never move NAV**.
+Only the vault's holdings changing value, or fees retained in the vault, can.
+On devnet the vault holds only SOL and SOL is the unit of account, so NAV is
+pinned at 1.0000. These are cash vaults with a published target basket, and the
+UI says so.
+
+**The mainnet gap:** `net_assets()` counts only lamports. Fund a vault with
+tokenized equities without changing it and NAV ignores them entirely, so
+depositors mint far too many shares and dilute existing holders. Mainnet needs
+a valuation step reading each leg's balance against a SOL-denominated price,
+multiplied by the xStocks rebasing multiplier.
+
+`redeem_in_kind` is unaffected: it pays `vault_balance × shares ÷ supply` per
+leg, correct at any price, so it keeps working even if a feed goes stale.
+
+---
+
+## 3. The trackers
+
+Seven vaults, all live on devnet, all seeded with real deposits. Fees are
+**10 ppm (0.001%)** in and out on every one.
+
+| Ticker | Fund | Share mint | Source |
 | --- | --- | --- | --- |
-| `mbtSOL` | Michael Burry Tracker | Scion's final 13F (Q3 2025) | Never, source is gone |
-| `icSOL` | Inverse Cramer Index | Editorial | Monthly |
-| `pltSOL` | Pelosi Tracker | STOCK Act disclosures | On each disclosure |
-| `cgSOL` | Congress Tracker | Aggregated disclosures, equal weight | Quarterly |
-| `bwSOL` | Buffett Tracker | Berkshire 13F top 6 | Quarterly |
-| `jstSOL` | Jim Simons Tracker | Renaissance 13F top 5 | Quarterly |
-| `psqSOL` | Ackman Tracker | Pershing Square 13F top 5 | Quarterly |
+| `mbtSOL` | Michael Burry Tracker | `EkCack…QKum` | Scion final 13F (Q3 2025) |
+| `icSOL` | Inverse Cramer Index | `BKzHT1…t6uu` | Editorial |
+| `pltSOL` | Pelosi Tracker | `9wHzV6…ARtQ` | STOCK Act disclosures |
+| `cgSOL` | Congress Tracker | `BL47Ni…Bkfw` | Aggregated disclosures |
+| `bwSOL` | Buffett Tracker | `Ackvk…EGJN` | Berkshire 13F top 6 |
+| `jstSOL` | Jim Simons Tracker | `5t8wBg…gNqa` | Renaissance 13F top 5 |
+| `psqSOL` | Ackman Tracker | `2bksTX…HFh6` | Pershing Square 13F top 5 |
 
 **Every basket was verified against real filings before any copy was written.**
-Where a strategy cannot be represented honestly, the card says so rather than
-faking it: Scion deregistered with the SEC in Nov 2025 and ~80% of its final
-book was put options a long-only vault cannot hold; Pelosi's filings disclose
-ranges and options, so those weights are labeled editorial estimates; Medallion
-discloses nothing, so `jstSOL` tracks only RenTec's public 13F.
+Where a strategy cannot be represented honestly, the card says so: Scion
+deregistered in Nov 2025 and ~80% of its final book was puts a long-only vault
+cannot hold; Pelosi's filings disclose ranges and options, so those weights are
+labelled editorial estimates; Medallion discloses nothing, so `jstSOL` tracks
+only RenTec's public 13F.
 
-All seven have Metaplex metadata and circular portrait icons, so they render
-with real names and images in Phantom and explorers.
+All seven have Metaplex metadata and halftone token art with the Solana
+gradient ring.
 
 ---
 
-## 3. The frontend
+## 4. The frontend
 
-Next.js 16 App Router, React 19, Tailwind v4, `@solana/kit` v7.
-
-### Solana integration
-
-Deliberately **not** wallet-adapter. Per the current Solana Foundation guidance:
-
-- `@solana/kit` v7 plugin client, built once in `app/providers.tsx`
-- `@solana/kit-plugin-wallet` for Wallet Standard discovery (no per-wallet adapters)
-- `@solana/react` for `ClientProvider`, `useClient`, `useAction`
-
-The program client in `lib/vault/` is hand-rolled rather than codegen'd: three
-account layouts and two instructions is less code than a Codama pipeline.
-Anchor discriminators are precomputed and pinned so nothing hashes at runtime.
+Next.js 16 App Router, React 19, Tailwind v4, `@solana/kit` v7. Deliberately
+**not** wallet-adapter, per current Solana Foundation guidance: Kit plugin
+client + Wallet Standard discovery + `@solana/react`.
 
 | File | Role |
 | --- | --- |
-| `lib/vault/program.ts` | PDAs, borsh decoders, instruction data encoders, discriminators |
-| `lib/vault/instructions.ts` | Instruction builders + `explainTransactionError` mapping every program error code to a human sentence |
-| `lib/vault/hooks.ts` | `useVault` (one `getMultipleAccounts` for tracker + mint + vault, so NAV can never render from a mismatched slot), `useShareBalance`, `useSolBalance` |
-| `lib/vault/pulse.ts` | Cluster vitals for the ticker rail: slot, TPS, epoch |
-| `lib/config.ts` | **Single source of truth.** Every address, ticker, fee, basket, portrait, and piece of copy. Launch day is a one-line edit |
+| `lib/config.ts` | **Single source of truth.** Every address, ticker, fee, basket, portrait, and piece of copy |
+| `lib/vault/program.ts` | PDAs, borsh decoders, instruction encoders, pinned discriminators |
+| `lib/vault/instructions.ts` | Builders + `explainTransactionError`, mapping each program error code to a human sentence |
+| `lib/vault/hooks.ts` | `useVault` (one `getMultipleAccounts` so NAV never renders from a mismatched slot), share/SOL balances |
+| `lib/vault/pulse.ts` | Cluster vitals for the ticker rail |
+| `lib/xstocks.ts` | Live basket prices from Backed |
+| `lib/polyfills.ts` | **Load-bearing.** See below |
+| `components/ui/halftone.tsx` | Canvas dot renderer; morphs dot radii in place when the portrait changes |
+| `components/ui/nav-note.tsx` | The NAV asterisk and its always-visible definition |
 
-### Design system
+### API routes
 
-One committed world in `app/globals.css`: white paper ground, Instrument Serif
-display, Inter body, IBM Plex Mono for every number, and the Solana brand
-gradient (`#00FFA3 → #DC1FFF`) as the only accent.
-
-- **Numbers are always mono and always tabular** so columns never jitter
-- `--grad-a-ink` / `--grad-b-ink` are darkened gradient stops used for text, so
-  gradient numerals still pass contrast on white
-- Portraits render as **dot-matrix halftones** on `<canvas>`, a stylized
-  derivative rather than a photograph. Changing the source **morphs dot radii
-  in place** rather than swapping images, so one face dissolves into the next
-- `prefers-reduced-motion` is honored throughout, including the halftone morph
-
-### Key components
-
-| Component | Notes |
+| Route | Status |
 | --- | --- |
-| `site/hero.tsx` | Doubles as the fund detail view: selecting a tracker swaps the headline for a 50/50 `FundPanel` + sticky portrait |
-| `trackers/tracker-row.tsx` | List row with live vault chip, expands via animated `grid-template-rows` (no JS measurement) |
-| `trackers/trade-form.tsx` | Buy/redeem with quote, fee, enforced minimum, and per-error-code messages |
-| `ui/halftone.tsx` | The canvas dot renderer and morph |
-| `lib/polyfills.ts` | **Load-bearing.** Safari has no `DisposableStack`; `@solana/kit` uses it at module scope, so without this every iOS visitor got a blank page. Must be imported before any Kit import |
+| `/api/xstocks` | ✅ Asset directory (641 names, **paginated at 100 — page it or you lose NVDA**) |
+| `/api/xstocks?symbols=` | ✅ Live price, rebasing multiplier, halt status |
+| `/api/waitlist` | ✅ Posts signups to Telegram |
+| `/api/backtest` | ⚠️ Built but returns null: no working price-history source |
+
+### Safari: the one that took the site down
+
+`@solana/kit` v7 uses `DisposableStack` at module scope. Safari has not shipped
+explicit resource management, so the whole bundle threw before React mounted
+and **every iOS visitor saw a blank page while desktop worked fine.** Fixed by
+importing `disposablestack/auto` in `lib/polyfills.ts`, which must be the first
+import in `providers.tsx`, above any Kit import.
 
 ---
 
-## 4. Operational scripts
+## 5. Data sources, tested
 
-Run from `web/`. All are idempotent and default to devnet.
+| Source | Result |
+| --- | --- |
+| xStocks `/public/assets`, `/multiplier`, `/system/status`, `/proof-of-reserves` | ✅ Free, no key |
+| xStocks `/price-data` | ⚠️ `200` with `{"quote": null}` outside US market hours. Never yet observed carrying a price, so **the parse path is unverified** |
+| House Clerk FD ZIP | ✅ Free and official, but the XML is only an index. Tickers and amounts live in per-filing PDFs, many scanned |
+| House / Senate Stock Watcher S3 | ❌ `403 AccessDenied`, buckets dead |
+| Quiver API | 🔑 Paid. Public pages are client-rendered and scrapeable with a headless browser |
+| Yahoo Finance chart | ❌ `429` from both this machine and Vercel egress |
+| Stooq | ❌ JavaScript proof-of-work wall |
+| Alpha Vantage demo key | ❌ IBM only |
+
+**To ship a performance chip**, a price-history key is needed. Twelve Data
+(800/day free) or Polygon (5/min) both fit given a 6-hour cache over ~30 unique
+symbols. It must be labelled **backtest**, not fund performance.
+
+---
+
+## 6. Scripts
+
+Run from `web/`. Idempotent, default to devnet, override with `RPC_URL=…`.
 
 ```bash
-node scripts/init-trackers.mjs                # create any missing trackers
-node scripts/set-metadata.mjs                 # register Metaplex metadata
-node scripts/deposit.mjs mbtSOL 0.3           # deposit SOL, mint shares
-node scripts/redeem.mjs  mbtSOL 0.1           # burn shares, get SOL back
+node scripts/init-trackers.mjs           # create any missing trackers
+node scripts/set-metadata.mjs            # register Metaplex metadata
+node scripts/set-fees.mjs 10 10          # 0.001% in and out (ppm)
+node scripts/deposit.mjs mbtSOL 0.3
+node scripts/redeem.mjs  mbtSOL 0.1
 ```
 
-Override the endpoint with `RPC_URL=…` (the public devnet faucet and RPC are
-heavily rate limited; a Helius devnet URL is more reliable).
+Token art is generated headlessly: crop rectangles are read off a gridded
+contact sheet of the portraits, halftoned on canvas with an S-curve for
+contrast, and ringed with the Solana gradient. **Replacing `public/tokens/*.png`
+updates what wallets show with no transaction**, because the metadata URI is
+unchanged. Wallets cache images hard, so the change is not instant.
 
 ---
 
-## 5. What is deliberately not built
+## 7. Open items
 
-- **Creator-launched indexes.** The program is already generic enough; what is
-  missing is the creator flow, the fee split, and the trust surface that
-  distinguishes a stranger's basket from a curated one. `/launch` states this
-  plainly instead of showing a dead "coming soon".
-- **Real swaps into tokenized equities.** Those mints are mainnet-only, so on
-  devnet every vault holds SOL and the UI says so on each card.
-- **An audit.** The program is unreviewed. The site says "unaudited, devnet
-  only" wherever it would matter.
+**Staged, not shipped** (local edits to `config.ts`):
+- Pelosi basket rebuilt from her real disclosures (Intel and Uber calls traded
+  May 2026, plus January's Amazon and Vistra exercises). The live on-chain
+  basket is still the old one; making it real needs a `rebalance` call.
+- Inverse Cramer copy citing Quiver's backtest: 42.7% win rate over 3,427
+  trades, Sharpe −0.171, −13.99% last year.
+
+**Not built:**
+- Oracle-backed `net_assets`, the prerequisite for mainnet.
+- Creator-launched indexes. The program is generic enough; what is missing is
+  the creator flow, fee split, and the trust surface separating a stranger's
+  basket from a curated one.
+- Real swaps into tokenized equities (mainnet-only mints).
+- An audit. The program is unreviewed and the site says so.
