@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+import { motionBudget } from "@/lib/motion";
+
 /**
  * A drifting field of ink specks, sized to its container.
  *
@@ -32,7 +34,12 @@ export function ParticleField({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const budget = motionBudget();
+    // A phone gets a thinner field at device resolution 1 and a slower clock.
+    // Same picture, a third of the fill cost.
+    const scale = budget === "light" ? 0.4 : 1;
+    const maxDpr = budget === "light" ? 1 : 2;
+    const frameMs = budget === "light" ? 1000 / 24 : 1000 / 30;
     let particles: {
       x: number;
       y: number;
@@ -48,7 +55,7 @@ export function ParticleField({
     let dpr = 1;
 
     const seed = () => {
-      const count = Math.round((width * height * density) / 10_000);
+      const count = Math.round((width * height * density * scale) / 10_000);
       particles = Array.from({ length: count }, () => ({
         x: Math.random() * width,
         y: Math.random() * height,
@@ -67,7 +74,7 @@ export function ParticleField({
       width = rect.width;
       height = rect.height;
       if (width === 0 || height === 0) return;
-      dpr = Math.min(2, window.devicePixelRatio || 1);
+      dpr = Math.min(maxDpr, window.devicePixelRatio || 1);
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       canvas.style.width = `${width}px`;
@@ -99,13 +106,12 @@ export function ParticleField({
       }
     };
 
-    const MIN_FRAME_MS = 1000 / 30;
     let last = 0;
 
     const tick = (now: number) => {
       frameRef.current = requestAnimationFrame(tick);
       if (!visibleRef.current) return;
-      if (now - last < MIN_FRAME_MS) return;
+      if (now - last < frameMs) return;
       last = now;
       step();
       paint(now);
@@ -124,7 +130,7 @@ export function ParticleField({
 
     resize();
 
-    if (reduced.matches) {
+    if (budget === "none") {
       // Still a field, just not a moving one.
       paint(0);
     } else {

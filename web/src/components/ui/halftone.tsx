@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { motionBudget } from "@/lib/motion";
+
 /**
  * Renders an image as a dot-matrix halftone: ink dots on transparent ground,
  * dot radius driven by source luminance. This is the brand's portrait
@@ -134,13 +136,11 @@ export function Halftone({
           return drawn;
         };
 
-        const reduced = window.matchMedia(
-          "(prefers-reduced-motion: reduce)",
-        ).matches;
+        const budget = motionBudget();
 
         cancelAnimationFrame(frameRef.current);
 
-        if (reduced || duration <= 0) {
+        if (budget === "none" || duration <= 0) {
           currentRef.current = target;
           onDotsRef.current?.(paint(target));
           return;
@@ -165,6 +165,11 @@ export function Halftone({
           Math.sin((x + y) * 0.16 + seconds * 1.15) * 0.6 +
           Math.sin((x - y * 0.6) * 0.09 - seconds * 0.73) * 0.4;
 
+        // This is the expensive canvas on the page: at pitch 5 a single frame
+        // is thousands of arcs. On a phone the morph is worth paying for, but
+        // breathing forever afterwards is not, so the loop stops once settled.
+        const idles = budget === "full";
+
         // Half rate. At this pitch a frame is thousands of arcs, and the
         // motion is slow enough that 30fps is indistinguishable from 60.
         const MIN_FRAME_MS = 1000 / 30;
@@ -172,6 +177,23 @@ export function Halftone({
 
         const tick = (now: number) => {
           if (cancelled) return;
+
+          const elapsed = now - start;
+          const t = Math.min(1, elapsed / duration);
+          const settled = t >= 1;
+
+          // Without the idle shimmer there is nothing left to draw once the
+          // morph lands, so the loop ends rather than repainting an identical
+          // frame thousands of arcs at a time.
+          if (settled && !idles) {
+            if (currentRef.current !== target) {
+              currentRef.current = target;
+              paint(target);
+              onDotsRef.current?.(settledDots);
+            }
+            return;
+          }
+
           frameRef.current = requestAnimationFrame(tick);
 
           // Off screen there is nothing to breathe for. rAF already stops in
@@ -180,13 +202,11 @@ export function Halftone({
           if (now - lastPaint < MIN_FRAME_MS) return;
           lastPaint = now;
 
-          const elapsed = now - start;
-          const t = Math.min(1, elapsed / duration);
           // Ease out cubic: the dots arrive quickly, then settle.
           const e = 1 - Math.pow(1 - t, 3);
           const seconds = elapsed / 1000;
           // The shimmer fades in behind the morph so the two never fight.
-          const amp = AMP * e;
+          const amp = idles ? AMP * e : 0;
 
           for (let y = 0; y < cells; y++) {
             for (let x = 0; x < cells; x++) {
@@ -198,7 +218,7 @@ export function Halftone({
           }
           paint(mix);
 
-          if (t >= 1 && currentRef.current !== target) {
+          if (settled && currentRef.current !== target) {
             currentRef.current = target;
             onDotsRef.current?.(settledDots);
           }
