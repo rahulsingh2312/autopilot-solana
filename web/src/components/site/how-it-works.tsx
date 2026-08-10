@@ -32,7 +32,7 @@ const FINE_PRINT = [
   },
   {
     title: "Coverage gaps",
-    body: "Only ~130 US equities are tokenized. Weights with no tokenized equivalent sit in the SOL sleeve, and each card states the percentage affected.",
+    body: "Only ~130 US equities are tokenized. The holdings list shows what a vault can actually hold; weights with no tokenized equivalent sit in the SOL sleeve, and each card can name them.",
   },
   {
     title: "Redemption reality",

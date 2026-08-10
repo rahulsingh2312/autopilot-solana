@@ -251,16 +251,28 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
 
   const deployed = Boolean(snapshot?.tracker);
   const nav = snapshot ? computeNav(snapshot.netAssets, snapshot.supply) : 1;
-  const maxWeight = Math.max(1, ...tracker.legs.map((l) => l.weightBps));
   const prices = useBasketPrices(tracker);
+
+  // The holdings list is what the vault can hold. A disclosed name with no
+  // token on chain is not a holding — it is a hole, and its weight sits in the
+  // SOL sleeve — so it stays out of the list entirely and out of every count.
+  const tradable = tracker.legs.filter((leg) => leg.tokenized);
+  const untradable = tracker.legs.filter((leg) => !leg.tokenized);
 
   // The top three carry most of the weight in every basket here; the tail is
   // for people who came to read it. Same for the caveat: it stays on the card
   // rather than behind a link, but it does not get to push the trade below
   // the fold on first look.
   const [allLegs, setAllLegs] = useState(false);
+  const [showMissing, setShowMissing] = useState(false);
   const [fullCaveat, setFullCaveat] = useState(false);
-  const legs = allLegs ? tracker.legs : tracker.legs.slice(0, VISIBLE_LEGS);
+  const legs = [
+    ...(allLegs ? tradable : tradable.slice(0, VISIBLE_LEGS)),
+    ...(showMissing ? untradable : []),
+  ];
+  // Bars scale to what is on screen, so hiding the largest hole does not leave
+  // every remaining bar drawn against a weight nobody can see.
+  const maxWeight = Math.max(1, ...legs.map((l) => l.weightBps));
 
   useEffect(() => {
     headingRef.current?.focus({ preventScroll: true });
@@ -304,10 +316,26 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
 
       <div className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-3">
-      {tracker.legs.length > 0 ? (
-        <div className="glass-inset flex flex-col gap-2 p-3 sm:p-3.5">
+      {tradable.length > 0 ? (
+        <div className="glass-inset group/holdings flex flex-col gap-2 p-3 sm:p-3.5">
           <div className="flex items-baseline justify-between gap-3">
-            <span className="meta">Holdings</span>
+            <span className="flex items-baseline gap-2">
+              <span className="meta">Holdings</span>
+              {/* The names the vault cannot hold are disclosure, not product,
+                  so they stay out of the way until asked for. On a pointer the
+                  toggle only surfaces on hover; touch has no hover, so there
+                  it is simply always there. */}
+              {untradable.length > 0 ? (
+                <button
+                  onClick={() => setShowMissing((open) => !open)}
+                  className="num rounded-full border border-rule px-2 py-0.5 text-[0.5625rem] uppercase tracking-wider text-faint transition-all hover:text-ink focus-visible:opacity-100 sm:opacity-0 sm:group-hover/holdings:opacity-100"
+                >
+                  {showMissing
+                    ? "hide"
+                    : `+${untradable.length} not tradable`}
+                </button>
+              ) : null}
+            </span>
             {prices.tokenizedCount > 0 ? (
               <span className="num flex items-baseline gap-2 text-[0.625rem] text-faint">
                 {prices.hasAnyPrice ? (
@@ -342,7 +370,9 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
             {legs.map((leg) => (
               <li
                 key={leg.symbol}
-                className="weightbar flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0 sm:flex-nowrap sm:gap-x-2.5"
+                className={`weightbar flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0 sm:flex-nowrap sm:gap-x-2.5 ${
+                  leg.tokenized ? "" : "opacity-55"
+                }`}
                 style={
                   {
                     "--w": `${(leg.weightBps / maxWeight) * 100}%`,
@@ -357,6 +387,14 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
                   {leg.company}
                 </span>
                 {(() => {
+                  // A revealed hole says why it is a hole, in the column the
+                  // price would have been in.
+                  if (!leg.tokenized)
+                    return (
+                      <span className="num shrink-0 text-[0.6875rem] uppercase tracking-wider text-faint">
+                        no token
+                      </span>
+                    );
                   const quote = leg.xstock
                     ? prices.bySymbol.get(leg.xstock)
                     : undefined;
@@ -390,12 +428,12 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
             ))}
           </ul>
 
-          {tracker.legs.length > VISIBLE_LEGS ? (
+          {tradable.length > VISIBLE_LEGS ? (
             <button
               onClick={() => setAllLegs((open) => !open)}
               className="num self-start pt-1.5 text-[0.6875rem] uppercase tracking-wider text-faint transition-colors hover:text-ink"
             >
-              {allLegs ? "Show less" : `Show all ${tracker.legs.length}`}
+              {allLegs ? "Show less" : `Show all ${tradable.length}`}
             </button>
           ) : null}
 

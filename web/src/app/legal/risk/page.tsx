@@ -64,7 +64,7 @@ export default function RiskPage() {
         {
           heading: "Coverage gaps",
           body: [
-            "Only around 130 US equities and ETFs are tokenized today. Where a disclosed position has no tokenized equivalent, that weight stays in the vault's SOL sleeve. The tracker will then not track the strategy it names, and the card states the percentage affected.",
+            "Only around 130 US equities and ETFs are tokenized today. Where a disclosed position has no tokenized equivalent, that weight stays in the vault's SOL sleeve. The tracker will then not track the strategy it names, and the card names those positions next to its holdings.",
           ],
         },
         {

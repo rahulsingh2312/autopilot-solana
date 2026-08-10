@@ -173,7 +173,7 @@ export const TRACKERS: TrackerConfig[] = [
     rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days by law",
     caveat:
-      "Weighted by how many members hold a name, not by how much they hold: disclosure ranges make true sizing impossible. It tracks what Congress holds most widely, not what it holds most of. Names with no tokenized counterpart keep their weight in the SOL sleeve, and the card states how much that is.",
+      "Weighted by how many members hold a name, not by how much they hold: disclosure ranges make true sizing impossible. It tracks what Congress holds most widely, not what it holds most of. Names with no tokenized counterpart keep their weight in the SOL sleeve, and the card names them next to the holdings.",
     legs: [
       { symbol: "AAPL", company: "Apple", weightBps: 909, tokenized: true, xstock: "AAPLx" },
       { symbol: "AMZN", company: "Amazon.com", weightBps: 842, tokenized: true, xstock: "AMZNx" },
@@ -213,7 +213,7 @@ export const TRACKERS: TrackerConfig[] = [
     rebalance: "On each new disclosure",
     filingDelay: "Up to 45 days after quarter end",
     caveat:
-      "Twelve positions out of 29, renormalized to 100%. American Express is Berkshire's second-largest holding and has no tokenized counterpart, so its weight sits in the SOL sleeve rather than tracking anything \u2014 the card states the percentage affected. Berkshire's biggest asset is also a mountain of T-bills no equity tracker can represent, so this is the equity sleeve, concentrated further.",
+      "Twelve positions out of 29, renormalized to 100%. American Express is Berkshire's second-largest holding and has no tokenized counterpart, so its weight sits in the SOL sleeve rather than tracking anything \u2014 the card names it next to the holdings. Berkshire's biggest asset is also a mountain of T-bills no equity tracker can represent, so this is the equity sleeve, concentrated further.",
     legs: [
       { symbol: "AAPL", company: "Apple", weightBps: 2424, tokenized: true, xstock: "AAPLx" },
       { symbol: "AXP", company: "AXP", weightBps: 1921, tokenized: false },
@@ -259,7 +259,7 @@ export const TRACKERS: TrackerConfig[] = [
       { symbol: "META", company: "Meta", weightBps: 1110, tokenized: true, xstock: "METAx" },
       { symbol: "HHH", company: "HHH", weightBps: 870, tokenized: false },
       { symbol: "SEG", company: "SEG", weightBps: 79, tokenized: false },
-      { symbol: "GOOG", company: "GOOG", weightBps: 65, tokenized: false },
+      { symbol: "GOOG", company: "Alphabet (Class C)", weightBps: 65, tokenized: false },
       { symbol: "HTZ", company: "HTZ", weightBps: 51, tokenized: false },
       { symbol: "GOOGL", company: "Alphabet", weightBps: 7, tokenized: true, xstock: "GOOGLx" },
     ],
@@ -395,7 +395,7 @@ export const TRACKERS: TrackerConfig[] = [
     legs: [
       { symbol: "AMZN", company: "Amazon.com", weightBps: 1861, tokenized: true, xstock: "AMZNx" },
       { symbol: "MU", company: "Micron Technology", weightBps: 1163, tokenized: true, xstock: "MUx" },
-      { symbol: "GOOG", company: "GOOG", weightBps: 1028, tokenized: false },
+      { symbol: "GOOG", company: "Alphabet (Class C)", weightBps: 1028, tokenized: false },
       { symbol: "UBER", company: "Uber", weightBps: 942, tokenized: true, xstock: "UBERx" },
       { symbol: "TSM", company: "TSMC", weightBps: 928, tokenized: true, xstock: "TSMx" },
       { symbol: "BABA", company: "BABA", weightBps: 899, tokenized: false },

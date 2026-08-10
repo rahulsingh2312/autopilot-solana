@@ -8,7 +8,6 @@ import type { TrackerConfig } from "@/lib/config";
 import {
   computeNav,
   formatNav,
-  formatWeight,
   lamportsToSolNumber,
 } from "@/lib/format";
 import { formatReturn, useTrackerReturns } from "@/lib/returns";
@@ -84,9 +83,10 @@ export function TrackerRow({
   const { select } = useTrackerSelection();
   const { snapshot } = useVault(tracker.ticker);
   const xstocks = useXstocks();
-  const tokenizedBps = tracker.legs
-    .filter((leg) => leg.tokenized)
-    .reduce((sum, leg) => sum + leg.weightBps, 0);
+  // Only what the vault can actually hold. A leg with no token is not a
+  // holding you can buy, so it is not counted here and not drawn — the fund
+  // panel keeps it behind a toggle for anyone who wants the full disclosure.
+  const tradable = tracker.legs.filter((leg) => leg.tokenized);
 
   const deployed = Boolean(snapshot?.tracker);
   const nav = snapshot ? computeNav(snapshot.netAssets, snapshot.supply) : 1;
@@ -113,10 +113,10 @@ export function TrackerRow({
               least interesting true thing about a fund on day one, so it
               rides at the end in the quiet weight. */}
           <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.8125rem]">
-            {tracker.legs.length > 0 ? (
+            {tradable.length > 0 ? (
               <span className="flex items-center gap-1.5">
                 <span className="flex -space-x-1.5">
-                  {tracker.legs.slice(0, 4).map((leg) => (
+                  {tradable.slice(0, 4).map((leg) => (
                     <TokenMark
                       key={leg.symbol}
                       symbol={leg.symbol}
@@ -126,14 +126,8 @@ export function TrackerRow({
                   ))}
                 </span>
                 <span className="num text-muted">
-                  {tracker.legs.length} holdings
+                  {tradable.length} holdings
                 </span>
-              </span>
-            ) : null}
-
-            {tokenizedBps > 0 ? (
-              <span className="num text-faint">
-                {formatWeight(tokenizedBps)} tokenized
               </span>
             ) : null}
 
