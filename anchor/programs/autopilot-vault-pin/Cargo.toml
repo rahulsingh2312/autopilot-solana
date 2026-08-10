@@ -1,0 +1,38 @@
+[package]
+name = "autopilot-vault-pin"
+version = "0.1.0"
+description = "Pinocchio rewrite of the basket vault: same guarantees, a fraction of the binary"
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "autopilot_vault_pin"
+
+[features]
+default = []
+# The entrypoint can only be defined once globally. Gating it behind a feature
+# keeps this crate usable as a library from the differential test harness,
+# which links it alongside the Anchor program.
+bpf-entrypoint = []
+# PDA derivation is a syscall on chain and a curve25519 computation off it.
+# Off by default so a host `cargo test` of the pure logic does not drag in the
+# curve dependency; enable it to compile the CPI handlers for the host.
+host-pda = ["dep:solana-address", "solana-address/curve25519"]
+
+[dependencies]
+pinocchio = { version = "0.11", default-features = false, features = ["cpi"] }
+pinocchio-system = "0.6"
+pinocchio-token = "0.7"
+pinocchio-token-2022 = "0.4"
+solana-address = { version = "2.7", optional = true }
+
+[dev-dependencies]
+litesvm = "0.10.0"
+solana-message = "3.0.1"
+solana-transaction = "3.0.2"
+solana-signer = "3.0.0"
+solana-keypair = "3.0.1"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }
