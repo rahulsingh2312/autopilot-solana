@@ -1,0 +1,15 @@
+# The Vercel project's Root Directory is ".", so a deploy uploads this whole
+# repo, not just web/. Keep the workshop out of it.
+#
+# brand/ is ~25 MB of generated PNGs, reference images and vendored fonts. The
+# Next app never imports from it and nothing in it is served, so it only ever
+# cost upload and build time — but that is a cost for nothing on every deploy.
+brand/
+
+# anchor/target is 22,742 files of Rust build output and, on its own, pushed a
+# deploy past Vercel's 15,000-file upload limit. The Next app imports nothing
+# from anchor/ — the vault decoders in web/src/lib/vault are hand-written and
+# do not read the IDL — so the whole Rust workspace stays out.
+anchor/
+backend/node_modules/
+backend/data/

@@ -34,7 +34,14 @@ export function Header() {
   return (
     <header className="site-header">
       <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-        <Link href="/" className="flex items-baseline gap-2.5">
+        <Link href="/" className="flex items-center gap-2.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/copycat-dark.png"
+            alt=""
+            aria-hidden
+            className="h-8 w-8 -translate-y-px"
+          />
           <span className="display text-[1.375rem] text-ink">
             {BRAND.name}
             <span className="grad-num">.</span>

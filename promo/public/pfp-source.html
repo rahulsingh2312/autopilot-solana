@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { width: 1024px; height: 1024px; }
+  .tile { width: 1024px; height: 1024px; position: relative; overflow: hidden;
+    display: flex; align-items: center; justify-content: center; background: #060608; }
+  .grid {
+    position: absolute; inset: -20%;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px);
+    background-size: 110px 110px;
+    transform: perspective(900px) rotateX(28deg) scale(1.4);
+    mask-image: radial-gradient(62% 62% at 50% 50%, transparent 30%, #000 76%);
+    -webkit-mask-image: radial-gradient(62% 62% at 50% 50%, transparent 30%, #000 76%);
+  }
+  .wash {
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(42% 32% at 14% 8%, rgba(159,239,205,0.10), transparent 70%),
+      radial-gradient(42% 32% at 88% 92%, rgba(246,185,223,0.10), transparent 70%);
+  }
+</style>
+</head>
+<body>
+<div class="tile">
+  <div class="grid"></div>
+  <div class="wash"></div>
+  <svg width="880" height="880" viewBox="0 0 1010 1010">
+    <defs>
+      <linearGradient id="pearl" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#b6f2d8"/>
+        <stop offset="0.33" stop-color="#cfe6fb"/>
+        <stop offset="0.66" stop-color="#ded0fa"/>
+        <stop offset="1" stop-color="#f8cfe9"/>
+      </linearGradient>
+      <linearGradient id="vivid1" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#35d9a0"/>
+        <stop offset="0.5" stop-color="#7f9bef"/>
+        <stop offset="1" stop-color="#c77bd8"/>
+      </linearGradient>
+      <pattern id="halftone" width="13" height="13" patternUnits="userSpaceOnUse">
+        <circle cx="2.5" cy="2.5" r="1.9" fill="#0a0a0a"/>
+      </pattern>
+      <linearGradient id="dotfade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.12"/>
+        <stop offset="0.45" stop-color="#fff" stop-opacity="0.45"/>
+        <stop offset="1" stop-color="#fff" stop-opacity="0.85"/>
+      </linearGradient>
+      <mask id="fadeMask">
+        <rect x="0" y="0" width="1010" height="1010" fill="url(#dotfade)"/>
+      </mask>
+      <path id="cathead" d="
+        M 250 420
+        C 240 300 260 190 300 160
+        C 330 140 400 200 440 250
+        C 465 240 545 240 570 250
+        C 610 200 680 140 710 160
+        C 750 190 770 300 760 420
+        C 790 480 800 540 790 610
+        C 770 760 660 850 505 850
+        C 350 850 240 760 220 610
+        C 210 540 222 480 250 420 Z"/>
+    </defs>
+    <use href="#cathead" fill="url(#vivid1)" opacity="0.9"
+      transform="translate(-60,-92) rotate(-9 505 505) scale(0.985)"/>
+    <use href="#cathead" fill="#fafaf8"/>
+    <g mask="url(#fadeMask)">
+      <use href="#cathead" fill="url(#halftone)" opacity="0.75"/>
+    </g>
+    <ellipse cx="400" cy="560" rx="30" ry="44" fill="#0a0a0a"/>
+    <ellipse cx="610" cy="560" rx="30" ry="44" fill="#0a0a0a"/>
+    <circle cx="412" cy="543" r="10" fill="#fafaf8"/>
+    <circle cx="622" cy="543" r="10" fill="#fafaf8"/>
+    <path d="M 480 660 L 530 660 L 505 692 Z" fill="#0a0a0a"/>
+    <path d="M 320 210 L 420 280 L 350 320 Z" fill="url(#pearl)" opacity="0.85"/>
+    <path d="M 690 210 L 590 280 L 660 320 Z" fill="url(#pearl)" opacity="0.85"/>
+    <g stroke="rgba(250,250,248,0.85)" stroke-width="9" stroke-linecap="round">
+      <line x1="290" y1="640" x2="130" y2="612"/>
+      <line x1="290" y1="688" x2="135" y2="700"/>
+      <line x1="720" y1="640" x2="880" y2="612"/>
+      <line x1="720" y1="688" x2="875" y2="700"/>
+    </g>
+    <g transform="translate(258,178)">
+      <circle r="11" fill="#fff"/>
+      <rect x="-2" y="-46" width="4" height="92" rx="2" fill="#fff" opacity="0.9"/>
+      <rect x="-46" y="-2" width="92" height="4" rx="2" fill="#fff" opacity="0.9"/>
+    </g>
+  </svg>
+</div>
+</body>
+</html>
