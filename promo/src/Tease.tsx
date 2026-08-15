@@ -176,7 +176,7 @@ const FollowScene: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const card = useRise(0, 50);
-  const CLICK = 50; // absolute frame 150 = 5.0s, synced with the bell
+  const CLICK = 35; // absolute frame 135 = 4.5s, synced with the bell
   const pressed = frame >= CLICK;
   const press = spring({ frame: frame - CLICK, fps, config: { damping: 200 } });
   const scale = pressed ? interpolate(press, [0, 0.4, 1], [0.92, 1.04, 1]) : 1;
@@ -248,41 +248,126 @@ type Reply = {
 
 // Real accounts appear only with things they actually tweeted, verbatim
 // (fetched 2026-08-15). The pltSOL spam comes from the parody accounts;
-// the legends are just the timeline going about its day.
+// the timeline legends are just going about their day.
+const TW = "https://pbs.twimg.com/profile_images";
 const REPLIES: Reply[] = [
-  { name: "gm enjoyer", handle: "@gmdotintern", text: "pltSOL", hue: 150 },
   {
     name: "toly 🇺🇸",
     handle: "@toly",
-    pfp: "https://pbs.twimg.com/profile_images/2075257710715781123/74AtQPd6_400x400.jpg",
-    text: "10k TPS all day every day would be cool",
+    pfp: `${TW}/2075257710715781123/74AtQPd6_400x400.jpg`,
+    text: "10k TPS all day every day would be cool i wanna buy few more pltSOL",
     hue: 240,
     check: true,
   },
-  { name: "she files i buy", handle: "@disclosuredegen", text: "pltSOL 😼", hue: 320 },
+  // {
+  //   name: "world",
+  //   handle: "@world_xyz",
+  //   pfp: `${TW}/2067369755238121472/-dm-hRBO_400x400.jpg`,
+  //   text: "the world will know",
+  //   hue: 210,
+  //   check: true,
+  // },
+  {
+    name: "0xmert.eth",
+    handle: "@0xmert",
+    pfp: `${TW}/1472160852144971779/516mWsiJ_400x400.jpg`,
+    text: "Time to retire thankyou pltSOL",
+    hue: 30,
+    check: true,
+  },
+  {
+    name: "BAGS",
+    handle: "@BagsApp",
+    pfp: `${TW}/2084756612464496640/wRhu5Jia_400x400.jpg`,
+    text: "me and the boys rebalancing the index.",
+    hue: 90,
+    check: true,
+  },
+  {
+    name: "Ansem 🐂🀄️",
+    handle: "@blknoiz06",
+    pfp: `${TW}/2052070109758226438/xlyPdLmn_400x400.jpg`,
+    text: "quit my job to invest in autopilot 5 years ago & now they've started paying me for it 😁",
+    hue: 0,
+    check: true,
+  },
   {
     name: "chase",
     handle: "@therealchaseeb",
-    pfp: "https://pbs.twimg.com/profile_images/2084847775296978944/xb6t_fy7_400x400.jpg",
-    text: "I hear dinosaurs on solana.",
+    pfp: `${TW}/2084847775296978944/xb6t_fy7_400x400.jpg`,
+    text: "I hear autpilot tracker on solana.",
     hue: 200,
     check: true,
   },
-  { name: "validator wife", handle: "@stakewifey", text: "pltSOL 🪂🪂", hue: 180 },
+  {
+    name: "raj 🖤",
+    handle: "@rajgokal",
+    pfp: `${TW}/1984256809427955712/H9T9bSeV_400x400.jpg`,
+    text: "🤣 let me in asap",
+    hue: 260,
+    check: true,
+  },
+  {
+    name: "Backpack 🎒",
+    handle: "@Backpack",
+    pfp: `${TW}/2061288977836261377/M7sS2GzR_400x400.jpg`,
+    text: "BREAKING: SpaceX $SPCX has completed its entry in autopilot.",
+    hue: 340,
+    check: true,
+  },
   {
     name: "vibhu",
     handle: "@vibhu",
-    pfp: "https://pbs.twimg.com/profile_images/2061115398854995970/NlohW-pV_400x400.jpg",
-    text: "Do you play backgammon?",
+    pfp: `${TW}/2061115398854995970/NlohW-pV_400x400.jpg`,
+    text: "I will kingmake this product king👑",
     hue: 40,
     check: true,
   },
-  { name: "unemployed, up bad", handle: "@exitliquidity", text: "pltSOL pltSOL pltSOL", hue: 270 },
+  {
+    name: "Superteam",
+    handle: "@superteam",
+    pfp: `${TW}/1679100194028392448/4_3L1nRh_400x400.jpg`,
+    text: "superteam is a cheat code but being a congress member hits different $pltSOL💪💪💪",
+    hue: 160,
+    check: true,
+  },
+  {
+    name: "Banks",
+    handle: "@Banks",
+    pfp: `${TW}/2074372624055173120/hdwTYShF_400x400.jpg`,
+    text: "LIVE, GIVING THE CHAT MONEY $$$ I trust pelosi",
+    hue: 60,
+    check: true,
+  },
+  {
+    name: "xStocks",
+    handle: "@xStocksFi",
+    pfp: `${TW}/1924429945050120192/vytRzPuU_400x400.jpg`,
+    text: "Tokenized stocks are now live on Autopilot SOL.",
+    hue: 220,
+    check: true,
+  },
+  {
+    name: "DogeFather",
+    handle: "@Dogefather",
+    pfp: `${TW}/1389998724424732676/fP3S-e7e_400x400.jpg`,
+    text: "still HODLing my pltSOL",
+    hue: 45,
+    check: true,
+  },
+  {
+    name: "alon",
+    handle: "@a1lon9",
+    pfp: `${TW}/1875434258426187776/XUJTdd67_400x400.jpg`,
+    text: "Bro can i buy you out 100 million shares of pltSOL",
+    hue: 140,
+    check: true,
+  },
   {
     name: "Jakey",
     handle: "@SolJakey",
-    pfp: "https://pbs.twimg.com/profile_images/2054466150948622336/EP1yjB-6_400x400.jpg",
-    text: "SOLANA SUMMER",
+    pfp: `${TW}/2054466150948622336/EP1yjB-6_400x400.jpg`,
+    text: "Congress Tracker Thursday🔥",
     hue: 120,
     check: true,
   },
@@ -317,12 +402,53 @@ const Avatar: React.FC<{ pfp?: string; hue: number; size: number }> = ({ pfp, hu
 };
 
 const CommentScene: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  // The feed scrolls like a live timeline; chips pop in as it fills.
+  const scroll = interpolate(frame, [14, durationInFrames], [0, 920], {
+    extrapolateLeft: "clamp",
+    extrapolateRight: "clamp",
+  });
   return (
     <Dark>
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, width: 860 }}>
-        {REPLIES.map((r, i) => (
-          <ReplyChip key={r.handle} {...r} delay={2 + i * 6} index={i} />
-        ))}
+      <div style={{ position: "absolute", inset: 0, overflow: "hidden" }}>
+        <div
+          style={{
+            position: "absolute",
+            top: 120,
+            left: 110,
+            width: 860,
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            transform: `translateY(${-scroll}px)`,
+          }}
+        >
+          {REPLIES.map((r, i) => (
+            <ReplyChip key={r.handle} {...r} delay={2 + i * 4} index={i} />
+          ))}
+        </div>
+        {/* feed fades at the edges so nothing clips hard */}
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 130,
+            background: `linear-gradient(180deg, ${BLACK} 20%, transparent)`,
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 190,
+            background: `linear-gradient(0deg, ${BLACK} 35%, transparent)`,
+          }}
+        />
       </div>
       <Caption text="Step two. Comment pltSOL" />
     </Dark>
@@ -382,10 +508,22 @@ const ReplyChip: React.FC<Reply & { delay: number; index: number }> = ({
 /* ── 4. the rebalance: her filing lands, the basket moves ────────── */
 
 // Real pltSOL basket, then the post-filing targets it animates toward.
-const LEGS = [
+// One leg exits the basket (UBERx) and one enters (TSLAx).
+type Leg = {
+  sym: string;
+  name: string;
+  from: number;
+  to: number;
+  px: number;
+  dir: number;
+  status?: "in" | "out";
+};
+
+const LEGS: Leg[] = [
   { sym: "INTCx", name: "Intel", from: 48, to: 36, px: 98.14, dir: 1 },
   { sym: "NVDAx", name: "NVIDIA", from: 6, to: 18, px: 218.98, dir: 1 },
-  { sym: "UBERx", name: "Uber", from: 12, to: 12, px: 78.02, dir: -1 },
+  { sym: "UBERx", name: "Uber", from: 12, to: 0, px: 78.02, dir: -1, status: "out" },
+  { sym: "TSLAx", name: "Tesla", from: 0, to: 12, px: 424.5, dir: 1, status: "in" },
   { sym: "AMZNx", name: "Amazon", from: 12, to: 10, px: 272.54, dir: -1 },
   { sym: "GOOGLx", name: "Alphabet", from: 12, to: 14, px: 346.16, dir: 1 },
   { sym: "AAPLx", name: "Apple", from: 6, to: 6, px: 304.85, dir: -1 },
@@ -459,18 +597,19 @@ const RebalanceScene: React.FC = () => {
   );
 };
 
-const LegRow: React.FC<{
-  sym: string;
-  name: string;
-  from: number;
-  to: number;
-  px: number;
-  dir: number;
-  index: number;
-}> = ({ sym, name, from, to, px, dir, index }) => {
+const LegRow: React.FC<Leg & { index: number }> = ({
+  sym,
+  name,
+  from,
+  to,
+  px,
+  dir,
+  status,
+  index,
+}) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const rise = useRise(4 + index * 5, 26);
+  const rise = useRise(4 + index * 4, 26);
   const shift = spring({
     frame: frame - (SHIFT_AT + index * 6),
     fps,
@@ -482,29 +621,49 @@ const LegRow: React.FC<{
   // Prices tick with a little deterministic jitter.
   const tick = Math.sin(frame * 0.31 + index * 2.3) * 0.12 + Math.sin(frame * 0.09 + index) * 0.2;
   const price = (px + tick * dir).toFixed(2);
+
+  // The exit fades and drifts right as it is sold; the entry starts as a
+  // ghost and arrives from the left when the rebalance reaches it.
+  const outFade = status === "out" ? interpolate(shift, [0, 1], [1, 0.28]) : 1;
+  const inGhost = status === "in" ? interpolate(shift, [0, 1], [0.28, 1]) : 1;
+  const slideX =
+    status === "out"
+      ? interpolate(shift, [0, 1], [0, 44])
+      : status === "in"
+        ? interpolate(shift, [0, 1], [-44, 0])
+        : 0;
+  const tagOn = moved && (status === "out" || status === "in");
   return (
     <div
       style={{
         display: "flex",
         alignItems: "center",
-        gap: 18,
-        padding: "13px 0",
+        gap: 16,
+        padding: "10px 0",
         borderTop: index === 0 ? "none" : "1px solid #1b1d21",
         ...rise,
+        opacity: rise.opacity * outFade * inGhost,
+        transform: `${rise.transform} translateX(${slideX}px)`,
       }}
     >
-      <div style={{ width: 108, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 23, color: "#e7e9ea" }}>
+      <Img
+        src={staticFile(`stocks/${sym}.png`)}
+        style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0 }}
+      />
+      <div style={{ width: 100, fontFamily: FONT_MONO, fontWeight: 700, fontSize: 22, color: "#e7e9ea" }}>
         {sym}
       </div>
-      <div style={{ width: 120, fontFamily: FONT_SANS, fontSize: 20, color: "#71767b" }}>{name}</div>
-      <div style={{ flexGrow: 1, height: 14, borderRadius: 7, backgroundColor: "#1b1d21", overflow: "hidden" }}>
+      <div style={{ width: 104, fontFamily: FONT_SANS, fontSize: 19, color: "#71767b" }}>{name}</div>
+      <div style={{ flexGrow: 1, height: 13, borderRadius: 7, backgroundColor: "#1b1d21", overflow: "hidden" }}>
         <div
           style={{
             width: `${w * 2}%`,
             height: "100%",
             borderRadius: 7,
             backgroundImage: moved
-              ? "linear-gradient(90deg, #35d9a0, #7f9bef)"
+              ? status === "out"
+                ? "linear-gradient(90deg, #ff6b5e, #c05fbe)"
+                : "linear-gradient(90deg, #35d9a0, #7f9bef)"
               : PEARL_GRAD,
             opacity: moved ? 1 : 0.65,
           }}
@@ -512,24 +671,55 @@ const LegRow: React.FC<{
       </div>
       <div
         style={{
-          width: 92,
+          width: 96,
           textAlign: "right",
           fontFamily: FONT_MONO,
           fontWeight: 700,
-          fontSize: 22,
-          color: moved ? "#35d9a0" : "#e7e9ea",
+          fontSize: 21,
+          color: moved ? (status === "out" ? "#ff6b5e" : "#35d9a0") : "#e7e9ea",
         }}
       >
         {w.toFixed(1)}%
       </div>
-      <div style={{ width: 118, textAlign: "right", fontFamily: FONT_MONO, fontSize: 19, color: "#9a9ba1" }}>
+      <div style={{ width: 106, textAlign: "right", fontFamily: FONT_MONO, fontSize: 18, color: "#9a9ba1" }}>
         ${price}
+      </div>
+      <div style={{ width: 74, textAlign: "right" }}>
+        {tagOn ? (
+          <span
+            style={{
+              fontFamily: FONT_MONO,
+              fontWeight: 700,
+              fontSize: 15,
+              letterSpacing: "0.1em",
+              padding: "5px 10px",
+              borderRadius: 999,
+              color: "#0a0a0c",
+              backgroundColor: status === "out" ? "#ff6b5e" : "#35d9a0",
+            }}
+          >
+            {status === "out" ? "SOLD" : "NEW"}
+          </span>
+        ) : null}
       </div>
     </div>
   );
 };
 
-/* ── 5. the exchange: comment → our reply ────────────────────────── */
+/* ── 5. the exchange: comment → our reply ─────────────────────────
+   Swap COMMENTER for any account that has actually replied once the
+   campaign is live: { name, handle, hue, pfp } — pfp takes an https
+   URL or a file in promo/public, same as the feed chips. Until then
+   it stays a parody handle: a fabricated post from a real account is
+   the one thing this file does not do. */
+
+const COMMENTER = {
+  name: "world",
+  handle: "@world_xyz",
+  text: "pltSOL ?",
+  hue: 240,
+  pfp: `${TW}/2067369755238121472/-dm-hRBO_400x400.jpg`,
+};
 
 const ExchangeScene: React.FC = () => {
   const top = useRise(2, 40);
@@ -549,24 +739,16 @@ const ExchangeScene: React.FC = () => {
             ...top,
           }}
         >
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 60,
-              background: "linear-gradient(135deg, hsl(240 70% 75%), hsl(300 70% 70%))",
-              flexShrink: 0,
-            }}
-          />
+          <Avatar pfp={COMMENTER.pfp} hue={COMMENTER.hue} size={60} />
           <div>
             <span style={{ fontFamily: FONT_SANS, fontWeight: 600, fontSize: 25, color: "#e7e9ea" }}>
-              orb watcher
+              {COMMENTER.name}
             </span>
             <span style={{ fontFamily: FONT_SANS, fontSize: 22, color: "#71767b", marginLeft: 10 }}>
-              @copytrooper
+              {COMMENTER.handle}
             </span>
             <div style={{ fontFamily: FONT_SANS, fontSize: 32, color: "#e7e9ea", marginTop: 4 }}>
-              pltSOL
+              {COMMENTER.text}
             </div>
           </div>
         </div>
@@ -743,8 +925,8 @@ export const Tease: React.FC = () => {
   return (
     <AbsoluteFill style={{ backgroundColor: BLACK }}>
       <Audio src={staticFile("launch-track.m4a")} />
-      {/* Bell lands exactly at 5.0s, on the Follow press. */}
-      <Sequence from={150} layout="none">
+      {/* Bell lands at 4.5s, on the Follow press. */}
+      <Sequence from={135} layout="none">
         <Audio src={staticFile("sfx/ding.m4a")} volume={1} />
       </Sequence>
       <Sequence from={HOOK.from} durationInFrames={HOOK.dur}>
