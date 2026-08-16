@@ -33,6 +33,11 @@ solana-message = "3.0.1"
 solana-transaction = "3.0.2"
 solana-signer = "3.0.0"
 solana-keypair = "3.0.1"
+solana-instruction = "3.0.0"
+# `curve25519` so the harness can derive PDAs on the host: the tests compute
+# the same addresses the programs do, rather than trusting either program's
+# answer for the address it was handed.
+solana-address = { version = "2.7", features = ["curve25519"] }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(target_os, values("solana"))'] }

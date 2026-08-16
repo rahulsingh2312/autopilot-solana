@@ -4,8 +4,33 @@
  * Idempotent: a tracker whose PDA already holds an account is skipped, so this
  * is safe to re-run after a partial failure.
  *
- *   node scripts/init-trackers.mjs                  # devnet, ~/.config/solana/id.json
- *   CLUSTER=mainnet-beta node scripts/init-trackers.mjs
+ *   node --experimental-strip-types scripts/init-trackers.mjs
+ *   CLUSTER=mainnet-beta node --experimental-strip-types scripts/init-trackers.mjs
+ *
+ * Type stripping is needed because the basket definitions are imported from
+ * `src/lib/config.ts` rather than duplicated here. That duplication is exactly
+ * how an earlier version of this script ended up seeding baskets that did not
+ * match the site: `config.ts` is the single source of truth, so it is the thing
+ * to read.
+ *
+ * Also **reconciles**: a tracker whose on-chain basket has drifted from
+ * `config.ts` is rebalanced rather than skipped.
+ *
+ * # Targets the Pinocchio program
+ *
+ * Three things differ from the Anchor version this replaces:
+ *
+ * - **One-byte discriminator** instead of an 8-byte sighash.
+ * - **Fixed-width arguments.** The old payload was borsh with length-prefixed
+ *   strings; this is a fixed header plus 66 bytes per leg.
+ * - **`name`, `rebalanceInterval` and `filingDelayDays` are gone.** All three
+ *   were written on chain and read by nothing. The name lives in the Metaplex
+ *   metadata (see `set-metadata.mjs`) and the cadence lives in `config.ts`,
+ *   which is where the UI was reading them from anyway.
+ *
+ * A tracker created here is **not** the one the Anchor program created for the
+ * same ticker: the program id is part of PDA derivation, so these are new
+ * accounts at new addresses.
  */
 
 import { readFile } from "node:fs/promises";
@@ -18,21 +43,18 @@ import {
   appendTransactionMessageInstructions,
   createKeyPairSignerFromBytes,
   createSolanaRpc,
-  createSolanaRpcSubscriptions,
   createTransactionMessage,
   getAddressEncoder,
-  getBytesEncoder,
-  getI64Encoder,
+  getBase64EncodedWireTransaction,
   getProgramDerivedAddress,
   getSignatureFromTransaction,
-  getU16Encoder,
-  getU32Encoder,
   pipe,
-  sendAndConfirmTransactionFactory,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
 } from "@solana/kit";
+
+import { TRACKERS as CONFIG_TRACKERS } from "../src/lib/config.ts";
 
 const CLUSTER = process.env.CLUSTER ?? "devnet";
 const RPC_URL =
@@ -40,207 +62,83 @@ const RPC_URL =
   (CLUSTER === "devnet"
     ? "https://api.devnet.solana.com"
     : "https://api.mainnet-beta.solana.com");
-const WS_URL = RPC_URL.replace(/^http/, "ws");
 
-const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
+const PROGRAM_ID =
+  process.env.PROGRAM_ID ?? "7Z3DAC8q4vgFr2ofxXonHT2jgJx3xk1bmQHsRjUmVAnY";
 const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
-const RENT_SYSVAR = "SysvarRent111111111111111111111111111111111";
 const ZERO_ADDRESS = "11111111111111111111111111111111";
 
-const INITIALIZE_TRACKER = new Uint8Array([
-  27, 157, 128, 87, 48, 201, 132, 35,
-]);
+const IX_INITIALIZE_TRACKER = 0;
+const IX_REBALANCE = 4;
+const STRATEGY_SPOT_BASKET = 0;
+
+/** Offsets into a `Tracker`, mirroring `state::tracker`. */
+const T_LEG_COUNT = 8;
+const T_LEGS = 170;
+const LEG_SIZE = 66;
+const LEG_WEIGHT_BPS = 32;
+
+/**
+ * Sized for the protocol ceiling rather than the current basket.
+ *
+ * The account is allocated once at `max_legs` and never reallocated, so a
+ * rebalance can never need more room than it was created with — and a 13F that
+ * adds a position must not be blocked by an account that was sized tight. The
+ * headroom costs about 0.004 SOL per tracker, which is the cheapest insurance
+ * in the whole deployment.
+ */
+const MAX_LEGS = 16;
+
+/**
+ * Legs that fit in one transaction.
+ *
+ * At 34 bytes per leg the protocol ceiling of 16 is 546 bytes of instruction
+ * data, comfortably inside the 1232-byte transaction limit — so this is no
+ * longer a real constraint and simply mirrors `MAX_LEGS`.
+ *
+ * It was a real constraint: an earlier layout carried the 32-byte `feed_id`
+ * inline, making a leg 66 bytes and a full basket 1,058 bytes of data, which
+ * did not fit. `cgSOL` and `aiSOL` could be neither created nor rebalanced.
+ * Feed ids now travel separately via `set_leg_feed`.
+ */
+const MAX_LEGS_PER_TX = MAX_LEGS;
+
+/**
+ * Fees are parts per million: 2500 ppm is 0.25%.
+ *
+ * The old table called this field `Bps` while feeding it ppm, which is how
+ * every live tracker ended up at 0.001% instead of 0.5%. Named correctly here.
+ */
+const DEPOSIT_FEE_PPM = 2500;
+const REDEEM_FEE_PPM = 2500;
 
 /**
  * Legs carry the zero mint on devnet: no tokenized equity exists here, so the
- * program routes that weight to the SOL sleeve and the UI says so. Binding
- * real xStocks mints is a mainnet-only change.
+ * program routes that weight to the SOL sleeve and the UI says so. Binding real
+ * xStocks mints — and their Pyth feed ids — is a mainnet-only change, and
+ * `validate_legs` enforces that a tokenized leg must carry a feed id.
  */
-const TRACKERS = [
-  {
-    ticker: "mbtSOL",
-    name: "Michael Burry Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 0,
-    filingDelayDays: 0,
-    legs: [
-      { symbol: "MOH", weightBps: 3511 },
-      { symbol: "LULU", weightBps: 2611 },
-      { symbol: "SLM", weightBps: 1950 },
-      { symbol: "BRKR", weightBps: 1928 },
-    ],
-  },
-  {
-    ticker: "icSOL",
-    name: "Inverse Cramer Index",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 2_592_000,
-    filingDelayDays: 0,
-    legs: [
-      { symbol: "NVDAx", weightBps: 2500 },
-      { symbol: "TSLAx", weightBps: 2000 },
-      { symbol: "MSTRx", weightBps: 1500 },
-      { symbol: "COINx", weightBps: 1500 },
-      { symbol: "HOODx", weightBps: 1500 },
-      { symbol: "CRCLx", weightBps: 1000 },
-    ],
-  },
-  {
-    ticker: "pltSOL",
-    name: "Pelosi Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 0,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "AVGO", weightBps: 2500 },
-      { symbol: "NVDAx", weightBps: 2500 },
-      { symbol: "PANW", weightBps: 1500 },
-      { symbol: "AAPLx", weightBps: 1250 },
-      { symbol: "GOOGLx", weightBps: 1250 },
-      { symbol: "TEM", weightBps: 1000 },
-    ],
-  },
-  {
-    ticker: "cgSOL",
-    name: "Congress Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 7776000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "NVDAx", weightBps: 2000 },
-      { symbol: "MSFTx", weightBps: 2000 },
-      { symbol: "AAPLx", weightBps: 2000 },
-      { symbol: "AMZNx", weightBps: 2000 },
-      { symbol: "GOOGLx", weightBps: 2000 },
-    ],
-  },
-  {
-    ticker: "bwSOL",
-    name: "Buffett Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 7776000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "AAPLx", weightBps: 2680 },
-      { symbol: "AXP", weightBps: 2120 },
-      { symbol: "KO", weightBps: 1410 },
-      { symbol: "BAC", weightBps: 1290 },
-      { symbol: "CVX", weightBps: 1250 },
-      { symbol: "GOOGLx", weightBps: 1250 },
-    ],
-  },
-  {
-    ticker: "jstSOL",
-    name: "Jim Simons Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 7776000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "UTHR", weightBps: 2400 },
-      { symbol: "PLTRx", weightBps: 2300 },
-      { symbol: "AAPLx", weightBps: 1800 },
-      { symbol: "KGC", weightBps: 1800 },
-      { symbol: "MU", weightBps: 1700 },
-    ],
-  },
-  {
-    ticker: "psqSOL",
-    name: "Ackman Tracker",
-    depositFeeBps: 50,
-    redeemFeeBps: 50,
-    rebalanceInterval: 7776000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "BN", weightBps: 2200 },
-      { symbol: "AMZNx", weightBps: 2150 },
-      { symbol: "UBER", weightBps: 1950 },
-      { symbol: "MSFTx", weightBps: 1900 },
-      { symbol: "QSR", weightBps: 1800 },
-    ],
-  },
-  {
-    // Fees are parts per million despite the field name: 10 ppm is 0.001%,
-    // matching every tracker already live rather than the 50 the older
-    // entries were created with and later corrected by set-fees.
-    ticker: "mg7SOL",
-    name: "Magnificent Seven",
-    depositFeeBps: 10,
-    redeemFeeBps: 10,
-    rebalanceInterval: 7_776_000,
-    filingDelayDays: 0,
-    legs: [
-      { symbol: "NVDAx", weightBps: 1429 },
-      { symbol: "MSFTx", weightBps: 1429 },
-      { symbol: "AAPLx", weightBps: 1429 },
-      { symbol: "AMZNx", weightBps: 1429 },
-      { symbol: "GOOGLx", weightBps: 1428 },
-      { symbol: "METAx", weightBps: 1428 },
-      { symbol: "TSLAx", weightBps: 1428 },
-    ],
-  },
-  {
-    ticker: "aiSOL",
-    name: "AI Infrastructure",
-    depositFeeBps: 10,
-    redeemFeeBps: 10,
-    rebalanceInterval: 7_776_000,
-    filingDelayDays: 0,
-    legs: [
-      { symbol: "NVDAx", weightBps: 2500 },
-      { symbol: "AVGOx", weightBps: 2500 },
-      { symbol: "MSFTx", weightBps: 2500 },
-      { symbol: "PLTRx", weightBps: 2500 },
-    ],
-  },
-  {
-    ticker: "rdSOL",
-    name: "Bridgewater Tracker",
-    depositFeeBps: 10,
-    redeemFeeBps: 10,
-    rebalanceInterval: 7_776_000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "SPYx", weightBps: 3810 },
-      { symbol: "IVV", weightBps: 2340 },
-      { symbol: "AMZNx", weightBps: 1220 },
-      { symbol: "NVDAx", weightBps: 1100 },
-      { symbol: "GOOGLx", weightBps: 770 },
-      { symbol: "AVGOx", weightBps: 760 },
-    ],
-  },
-  {
-    ticker: "dtSOL",
-    name: "Tepper Tracker",
-    depositFeeBps: 10,
-    redeemFeeBps: 10,
-    rebalanceInterval: 7_776_000,
-    filingDelayDays: 45,
-    legs: [
-      { symbol: "AMZNx", weightBps: 3140 },
-      { symbol: "MUx", weightBps: 1960 },
-      { symbol: "GOOG", weightBps: 1740 },
-      { symbol: "UBERx", weightBps: 1590 },
-      { symbol: "TSMx", weightBps: 1570 },
-    ],
-  },
-];
+const TRACKERS = CONFIG_TRACKERS.map((t) => ({
+  ticker: t.ticker,
+  legs: t.legs.map((l) => l.weightBps),
+}));
+
+for (const t of TRACKERS) {
+  const sum = t.legs.reduce((a, b) => a + b, 0);
+  if (sum !== 10_000) {
+    throw new Error(`${t.ticker}: weights sum to ${sum}, not 10000`);
+  }
+  if (t.legs.length > MAX_LEGS) {
+    throw new Error(`${t.ticker}: ${t.legs.length} legs exceeds the ${MAX_LEGS} ceiling`);
+  }
+}
 
 const utf8 = new TextEncoder();
 const addrEnc = getAddressEncoder();
-const u16 = getU16Encoder();
-const u32 = getU32Encoder();
-const i64 = getI64Encoder();
 
 const concat = (chunks) => {
-  const total = chunks.reduce((n, c) => n + c.length, 0);
-  const out = new Uint8Array(total);
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
   let o = 0;
   for (const c of chunks) {
     out.set(c, o);
@@ -249,39 +147,119 @@ const concat = (chunks) => {
   return out;
 };
 
-const encodeString = (value) => {
-  const bytes = utf8.encode(value);
-  return concat([new Uint8Array(u32.encode(bytes.length)), bytes]);
+const u16le = (n) => {
+  const b = new Uint8Array(2);
+  new DataView(b.buffer).setUint16(0, n, true);
+  return b;
 };
 
+/**
+ * ```text
+ * 0    1     discriminator
+ * 1    1     strategy
+ * 2    1     max_legs
+ * 3    2     deposit_fee_ppm  (LE)
+ * 5    2     redeem_fee_ppm   (LE)
+ * 7    1     ticker_len
+ * 8    12    ticker           (zero-padded)
+ * 20   1     leg_count
+ * 21   n*34  legs             (mint || weight_bps LE)
+ * ```
+ */
 function encodeInitializeData(tracker) {
-  const legs = tracker.legs.map((leg) =>
-    concat([
-      new Uint8Array(addrEnc.encode(ZERO_ADDRESS)),
-      encodeString(leg.symbol),
-      new Uint8Array(u16.encode(leg.weightBps)),
-    ]),
-  );
+  const tickerBytes = utf8.encode(tracker.ticker);
+  if (tickerBytes.length === 0 || tickerBytes.length > 12) {
+    throw new Error(`${tracker.ticker}: ticker must be 1..12 bytes`);
+  }
+  const paddedTicker = new Uint8Array(12);
+  paddedTicker.set(tickerBytes);
+
+  const zeroMint = new Uint8Array(addrEnc.encode(ZERO_ADDRESS));
 
   return concat([
-    INITIALIZE_TRACKER,
-    encodeString(tracker.ticker),
-    encodeString(tracker.name),
-    new Uint8Array(u32.encode(legs.length)),
-    ...legs,
-    new Uint8Array(u16.encode(tracker.depositFeeBps)),
-    new Uint8Array(u16.encode(tracker.redeemFeeBps)),
-    new Uint8Array(i64.encode(BigInt(tracker.rebalanceInterval))),
-    new Uint8Array(u16.encode(tracker.filingDelayDays)),
+    new Uint8Array([
+      IX_INITIALIZE_TRACKER,
+      STRATEGY_SPOT_BASKET,
+      MAX_LEGS,
+    ]),
+    u16le(DEPOSIT_FEE_PPM),
+    u16le(REDEEM_FEE_PPM),
+    new Uint8Array([tickerBytes.length]),
+    paddedTicker,
+    new Uint8Array([tracker.legs.length]),
+    ...tracker.legs.flatMap((weightBps) => [zeroMint, u16le(weightBps)]),
   ]);
 }
 
-async function pda(seeds) {
-  const [address] = await getProgramDerivedAddress({
-    programAddress: PROGRAM_ID,
-    seeds,
-  });
-  return address;
+/** The basket as it currently stands on chain, as weights in order. */
+function readOnChainWeights(base64) {
+  const d = Buffer.from(base64, "base64");
+  const count = d[T_LEG_COUNT];
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    out.push(d.readUInt16LE(T_LEGS + i * LEG_SIZE + LEG_WEIGHT_BPS));
+  }
+  return out;
+}
+
+function encodeRebalanceData(legs) {
+  const zeroMint = new Uint8Array(addrEnc.encode(ZERO_ADDRESS));
+  return concat([
+    new Uint8Array([IX_REBALANCE, legs.length]),
+    ...legs.flatMap((weightBps) => [zeroMint, u16le(weightBps)]),
+  ]);
+}
+
+const pda = async (seeds) =>
+  (await getProgramDerivedAddress({ programAddress: PROGRAM_ID, seeds }))[0];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** The public endpoints' rate limiter, which is throttling rather than failure. */
+const isRateLimit = (e) =>
+  e?.context?.statusCode === 429 || String(e?.message ?? "").includes("429");
+
+/**
+ * Retry an RPC call on 429, honouring `retry-after` when the endpoint sends
+ * one. Seeding eleven trackers is ~40 calls in a burst, which the free tier
+ * throttles reliably.
+ */
+async function rpcRetry(fn, attempts = 8) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!isRateLimit(e) || i >= attempts - 1) throw e;
+      const after = Number(e?.context?.headers?.["retry-after"] ?? 0);
+      await sleep(after > 0 ? after * 1000 : 2000 * (i + 1));
+    }
+  }
+}
+
+/** Build, sign, send and confirm a single-instruction transaction. */
+async function sendIx(signer, rpc, instruction, confirm) {
+  const { value: blockhash } = await rpcRetry(() =>
+    rpc.getLatestBlockhash().send(),
+  );
+  const message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(signer, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
+    (m) => appendTransactionMessageInstructions([instruction], m),
+    (m) => addSignersToTransactionMessage([signer], m),
+  );
+  const signed = await signTransactionMessageWithSigners(message);
+  const sig = getSignatureFromTransaction(signed);
+  await rpcRetry(() =>
+    rpc
+      .sendTransaction(getBase64EncodedWireTransaction(signed), {
+        encoding: "base64",
+        preflightCommitment: "confirmed",
+      })
+      .send(),
+  );
+  await confirm(sig);
+  return sig;
 }
 
 async function main() {
@@ -291,32 +269,89 @@ async function main() {
   const signer = await createKeyPairSignerFromBytes(new Uint8Array(secret));
 
   const rpc = createSolanaRpc(RPC_URL);
-  const rpcSubscriptions = createSolanaRpcSubscriptions(WS_URL);
-  const sendAndConfirm = sendAndConfirmTransactionFactory({
-    rpc,
-    rpcSubscriptions,
-  });
+
+  // Confirmation by polling, not by websocket subscription: the public
+  // endpoints throttle subscriptions hard enough that a dropped socket reads
+  // as a program failure when it is nothing of the kind.
+  async function confirm(signature) {
+    for (let i = 0; i < 60; i++) {
+      const { value } = await rpcRetry(() =>
+        rpc.getSignatureStatuses([signature]).send(),
+      );
+      const status = value[0];
+      if (status?.err) {
+        throw new Error(`transaction failed: ${JSON.stringify(status.err)}`);
+      }
+      if (
+        status?.confirmationStatus === "confirmed" ||
+        status?.confirmationStatus === "finalized"
+      ) {
+        return;
+      }
+      await sleep(1000);
+    }
+    throw new Error(`timed out confirming ${signature}`);
+  }
 
   console.log(`cluster   ${CLUSTER}`);
+  console.log(`program   ${PROGRAM_ID}`);
   console.log(`authority ${signer.address}`);
 
-  const { value: balance } = await rpc.getBalance(signer.address).send();
+  const { value: balance } = await rpcRetry(() =>
+    rpc.getBalance(signer.address).send(),
+  );
   console.log(`balance   ${Number(balance) / 1e9} SOL\n`);
 
+  let created = 0;
+  let reconciled = 0;
+  let skipped = 0;
   for (const tracker of TRACKERS) {
-    const trackerPda = await pda([utf8.encode("tracker"), utf8.encode(tracker.ticker)]);
-    const vaultPda = await pda([
-      utf8.encode("vault"),
-      new Uint8Array(addrEnc.encode(trackerPda)),
+    const trackerPda = await pda([
+      utf8.encode("tracker"),
+      utf8.encode(tracker.ticker),
     ]);
-    const mintPda = await pda([
-      utf8.encode("share"),
-      new Uint8Array(addrEnc.encode(trackerPda)),
-    ]);
+    const trackerSeed = new Uint8Array(addrEnc.encode(trackerPda));
+    const vaultPda = await pda([utf8.encode("vault"), trackerSeed]);
+    const mintPda = await pda([utf8.encode("share"), trackerSeed]);
 
-    const { value: existing } = await rpc.getAccountInfo(trackerPda, { encoding: "base64" }).send();
+    if (tracker.legs.length > MAX_LEGS_PER_TX) {
+      console.log(
+        `${tracker.ticker.padEnd(8)} SKIPPED           ${tracker.legs.length} legs will not fit one transaction (max ${MAX_LEGS_PER_TX})`,
+      );
+      skipped += 1;
+      continue;
+    }
+
+    const { value: existing } = await rpcRetry(() =>
+      rpc.getAccountInfo(trackerPda, { encoding: "base64" }).send(),
+    );
     if (existing) {
-      console.log(`${tracker.ticker.padEnd(8)} already initialized  ${trackerPda}`);
+      const onChain = readOnChainWeights(existing.data[0]);
+      const matches =
+        onChain.length === tracker.legs.length &&
+        onChain.every((w, i) => w === tracker.legs[i]);
+      if (matches) {
+        console.log(`${tracker.ticker.padEnd(8)} up to date        ${onChain.length} legs`);
+        continue;
+      }
+
+      console.log(
+        `${tracker.ticker.padEnd(8)} drifted           ${onChain.length} legs on chain, ${tracker.legs.length} in config — rebalancing`,
+      );
+      await sendIx(
+        signer,
+        rpc,
+        {
+          programAddress: PROGRAM_ID,
+          accounts: [
+            { address: signer.address, role: AccountRole.READONLY_SIGNER },
+            { address: trackerPda, role: AccountRole.WRITABLE },
+          ],
+          data: encodeRebalanceData(tracker.legs),
+        },
+        confirm,
+      );
+      reconciled += 1;
       continue;
     }
 
@@ -324,35 +359,35 @@ async function main() {
       programAddress: PROGRAM_ID,
       accounts: [
         { address: signer.address, role: AccountRole.WRITABLE_SIGNER },
-        { address: signer.address, role: AccountRole.READONLY },
+        { address: signer.address, role: AccountRole.READONLY }, // fee_recipient
         { address: trackerPda, role: AccountRole.WRITABLE },
         { address: mintPda, role: AccountRole.WRITABLE },
         { address: vaultPda, role: AccountRole.WRITABLE },
-        { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
+        // The port declares system before token, and reads rent from a
+        // compiled-in constant rather than taking the sysvar.
         { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
-        { address: RENT_SYSVAR, role: AccountRole.READONLY },
+        { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
       ],
       data: encodeInitializeData(tracker),
     };
 
-    const { value: blockhash } = await rpc.getLatestBlockhash().send();
-    const message = pipe(
-      createTransactionMessage({ version: 0 }),
-      (m) => setTransactionMessageFeePayerSigner(signer, m),
-      (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
-      (m) => appendTransactionMessageInstructions([instruction], m),
-      (m) => addSignersToTransactionMessage([signer], m),
-    );
+    const sig = await sendIx(signer, rpc, instruction, confirm);
+    created += 1;
 
-    const signed = await signTransactionMessageWithSigners(message);
-    await sendAndConfirm(signed, { commitment: "confirmed" });
-
-    console.log(`${tracker.ticker.padEnd(8)} initialized`);
+    console.log(`${tracker.ticker.padEnd(8)} initialized  ${tracker.legs.length} legs`);
     console.log(`  tracker ${trackerPda}`);
     console.log(`  vault   ${vaultPda}`);
     console.log(`  mint    ${mintPda}`);
-    console.log(`  tx      ${getSignatureFromTransaction(signed)}\n`);
+    console.log(`  tx      ${sig}\n`);
   }
+
+  const { value: after } = await rpcRetry(() =>
+    rpc.getBalance(signer.address).send(),
+  );
+  console.log(
+    `${created} created, ${reconciled} rebalanced, ${skipped} skipped; ` +
+      `${Number(balance - after) / 1e9} SOL spent, ${Number(after) / 1e9} SOL left`,
+  );
 }
 
 main().catch((error) => {

@@ -1,30 +1,32 @@
 /**
- * Hand-rolled Kit client for the autopilot_vault program.
+ * Hand-rolled Kit client for the `autopilot_vault_pin` program.
  *
- * Small enough that a codegen step would cost more than it saves: three
- * account layouts and two instructions. Discriminators are Anchor's
- * `sha256("global:<ix>")[0..8]` and `sha256("account:<T>")[0..8]`, computed
- * once and pinned here so nothing has to hash at runtime.
+ * # This targets the Pinocchio program, not the Anchor one
+ *
+ * Two things changed and both are visible right here:
+ *
+ * - **Discriminators are one byte**, not Anchor's 8-byte
+ *   `sha256("global:<ix>")[0..8]`. The program numbers its instructions in a
+ *   plain enum, so this table is the enum, transcribed.
+ * - **Accounts are fixed-offset**, not borsh. The Anchor `Tracker` began with
+ *   an 8-byte account discriminator and put a length-prefixed `ticker` and
+ *   `name` before the basket, so every field after the first string sat at an
+ *   offset that depended on the data and had to be *walked*. The port writes a
+ *   1-byte type tag, a version, and then fixed offsets — so this decoder
+ *   indexes rather than walks, and a truncated account fails a length check
+ *   instead of silently decoding garbage.
+ *
+ * The offsets below mirror `state::tracker` in the program. They are duplicated
+ * rather than generated on purpose: `header_layout_is_frozen` on the Rust side
+ * asserts them, so a change has to be made in two places deliberately.
  */
 
 import {
-  addDecoderSizePrefix,
-  addEncoderSizePrefix,
   getAddressDecoder,
   getAddressEncoder,
-  getBooleanDecoder,
-  getBytesEncoder,
-  getI64Decoder,
   getProgramDerivedAddress,
-  getStructDecoder,
-  getStructEncoder,
   getU16Decoder,
-  getU32Decoder,
-  getU32Encoder,
   getU64Decoder,
-  getU64Encoder,
-  getU8Decoder,
-  getUtf8Decoder,
   type Address,
   type ReadonlyUint8Array,
 } from "@solana/kit";
@@ -33,22 +35,38 @@ import { PROGRAM_ID } from "@/lib/config";
 
 export const VAULT_PROGRAM_ADDRESS = PROGRAM_ID as Address;
 
-export const IX_DISCRIMINATORS = {
-  initializeTracker: new Uint8Array([27, 157, 128, 87, 48, 201, 132, 35]),
-  deposit: new Uint8Array([242, 35, 198, 137, 82, 225, 242, 182]),
-  redeemForSol: new Uint8Array([60, 155, 227, 70, 252, 132, 98, 231]),
-  redeemInKind: new Uint8Array([102, 58, 189, 252, 192, 219, 140, 89]),
-  rebalance: new Uint8Array([108, 158, 77, 9, 210, 52, 88, 62]),
-  setPaused: new Uint8Array([91, 60, 125, 192, 176, 225, 166, 218]),
-  setFees: new Uint8Array([137, 178, 49, 58, 0, 245, 242, 190]),
+/**
+ * One-byte instruction discriminators, mirroring `Instruction` in the
+ * program's `lib.rs`. The values are positional — inserting a variant
+ * renumbers everything after it, which is why the Rust side has
+ * `discriminators_round_trip` guarding them.
+ */
+export const IX = {
+  initializeTracker: 0,
+  deposit: 1,
+  redeemForSol: 2,
+  redeemInKind: 3,
+  rebalance: 4,
+  swapLeg: 5,
+  setTokenMetadata: 6,
+  setPaused: 7,
+  setFees: 8,
+  emergencyWithdrawSol: 9,
+  emergencyWithdrawToken: 10,
+  setAuthority: 11,
+  setManager: 12,
+  closeTracker: 13,
+  setLegFeed: 14,
 } as const;
 
-export const TRACKER_DISCRIMINATOR = new Uint8Array([
-  31, 18, 229, 12, 35, 100, 128, 68,
-]);
+/** Account type tags. `2` is reserved: it was `LegOracle`, now deleted. */
+export const TAG_TRACKER = 1;
+export const LAYOUT_VERSION = 1;
 
 export const TOKEN_PROGRAM_ADDRESS =
   "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address;
+export const TOKEN_2022_PROGRAM_ADDRESS =
+  "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" as Address;
 export const ASSOCIATED_TOKEN_PROGRAM_ADDRESS =
   "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" as Address;
 export const SYSTEM_PROGRAM_ADDRESS =
@@ -57,6 +75,10 @@ export const SYSTEM_PROGRAM_ADDRESS =
 const utf8 = new TextEncoder();
 
 // ── PDAs ──────────────────────────────────────────────────────────────
+//
+// Seeds are unchanged from the Anchor program, but the *program id* is not, so
+// every address below differs. Nothing from the old deployment is reachable
+// through this client.
 
 export async function findTrackerPda(ticker: string) {
   const [address] = await getProgramDerivedAddress({
@@ -95,131 +117,134 @@ export async function findAssociatedTokenPda(owner: Address, mint: Address) {
   return address;
 }
 
-// ── Account decoding ──────────────────────────────────────────────────
+// ── Account layout ────────────────────────────────────────────────────
+
+/** Byte offsets into a `Tracker` account. Mirrors `state::tracker`. */
+const T = {
+  TAG: 0,
+  VERSION: 1,
+  STRATEGY: 2,
+  PAUSED: 3,
+  BUMP: 4,
+  VAULT_BUMP: 5,
+  MINT_BUMP: 6,
+  MAX_LEGS: 7,
+  LEG_COUNT: 8,
+  TICKER_LEN: 9,
+  TICKER: 10,
+  AUTHORITY: 22,
+  MANAGER: 54,
+  SHARE_MINT: 86,
+  FEE_RECIPIENT: 118,
+  RENT_RESERVE: 150,
+  DEPOSIT_FEE_PPM: 158,
+  REDEEM_FEE_PPM: 160,
+  RESERVED: 162,
+  LEGS: 170,
+} as const;
+
+const MAX_TICKER_LEN = 12;
+export const LEG_SIZE = 66;
+const LEG_MINT = 0;
+const LEG_WEIGHT_BPS = 32;
+const LEG_FEED_ID = 34;
 
 export type OnChainLeg = {
   mint: Address;
-  symbol: string;
   weightBps: number;
+  /**
+   * Pyth feed id for the underlying equity. Lives here now — the Anchor
+   * program kept it in a separate `LegOracle` PDA alongside a multiplier
+   * pushed over HTTP. The multiplier turned out to be readable straight off the
+   * mint's Token-2022 ScaledUiAmount extension, so the PDA is gone and this is
+   * all that was left of it.
+   */
+  feedId: ReadonlyUint8Array;
 };
 
 export type TrackerAccount = {
+  /** Can reach holder funds: fees, pause, emergency withdrawal, role changes. */
   authority: Address;
+  /** Can change what the basket holds, and nothing else. */
+  manager: Address;
   shareMint: Address;
   feeRecipient: Address;
   ticker: string;
-  name: string;
+  strategy: number;
   legs: OnChainLeg[];
+  maxLegs: number;
   depositFeePpm: number;
   redeemFeePpm: number;
-  rebalanceInterval: bigint;
-  lastRebalanceTs: bigint;
-  rebalanceCount: number;
-  filingDelayDays: number;
   rentReserve: bigint;
   paused: boolean;
-  createdAt: bigint;
   bump: number;
   vaultBump: number;
   mintBump: number;
 };
 
-// Borsh strings are u32-length-prefixed; a bare utf8 decoder would swallow
-// the rest of the account.
-const legDecoder = getStructDecoder([
-  ["mint", getAddressDecoder()],
-  ["symbol", addDecoderSizePrefix(getUtf8Decoder(), getU32Decoder())],
-  ["weightBps", getU16Decoder()],
-]);
-
 /**
- * Anchor allocates the account at max size, so the tail is zero padding.
- * Reading field by field with explicit offsets avoids a decoder that insists
- * on consuming the whole buffer.
+ * Decode a `Tracker`, or return null if this is not one.
+ *
+ * Checks the type tag *and* the layout version. The version check is the part
+ * worth keeping: a future layout that this build cannot read must decode to
+ * nothing rather than to plausible-looking wrong numbers, because the number it
+ * would get wrong is NAV.
  */
 export function decodeTracker(data: ReadonlyUint8Array): TrackerAccount | null {
-  for (let i = 0; i < 8; i++) {
-    if (data[i] !== TRACKER_DISCRIMINATOR[i]) return null;
-  }
+  if (data.length < T.LEGS) return null;
+  if (data[T.TAG] !== TAG_TRACKER) return null;
+  if (data[T.VERSION] !== LAYOUT_VERSION) return null;
+
+  const maxLegs = data[T.MAX_LEGS];
+  const legCount = data[T.LEG_COUNT];
+  if (maxLegs === 0 || legCount > maxLegs) return null;
+  if (data.length < T.LEGS + maxLegs * LEG_SIZE) return null;
+
+  const tickerLen = data[T.TICKER_LEN];
+  if (tickerLen === 0 || tickerLen > MAX_TICKER_LEN) return null;
 
   const addr = getAddressDecoder();
-  const u32 = getU32Decoder();
   const u16 = getU16Decoder();
-  const u8 = getU8Decoder();
   const u64 = getU64Decoder();
-  const i64 = getI64Decoder();
-  const bool = getBooleanDecoder();
 
-  let o = 8;
-  const [authority, o1] = addr.read(data, o);
-  o = o1;
-  const [shareMint, o2] = addr.read(data, o);
-  o = o2;
-  const [feeRecipient, o3] = addr.read(data, o);
-  o = o3;
-
-  const readString = (): string => {
-    const [len, next] = u32.read(data, o);
-    const bytes = data.slice(next, next + len);
-    o = next + len;
-    return new TextDecoder().decode(bytes as Uint8Array);
-  };
-
-  const ticker = readString();
-  const name = readString();
-
-  const [legCount, oLegs] = u32.read(data, o);
-  o = oLegs;
   const legs: OnChainLeg[] = [];
   for (let i = 0; i < legCount; i++) {
-    const [leg, next] = legDecoder.read(data, o);
-    o = next;
-    legs.push(leg as OnChainLeg);
+    const at = T.LEGS + i * LEG_SIZE;
+    const [mint] = addr.read(data, at + LEG_MINT);
+    const [weightBps] = u16.read(data, at + LEG_WEIGHT_BPS);
+    legs.push({
+      mint,
+      weightBps,
+      feedId: data.slice(at + LEG_FEED_ID, at + LEG_FEED_ID + 32),
+    });
   }
 
-  const [depositFeePpm, o4] = u16.read(data, o);
-  o = o4;
-  const [redeemFeePpm, o5] = u16.read(data, o);
-  o = o5;
-  const [rebalanceInterval, o6] = i64.read(data, o);
-  o = o6;
-  const [lastRebalanceTs, o7] = i64.read(data, o);
-  o = o7;
-  const [rebalanceCount, o8] = u32.read(data, o);
-  o = o8;
-  const [filingDelayDays, o9] = u16.read(data, o);
-  o = o9;
-  const [rentReserve, o10] = u64.read(data, o);
-  o = o10;
-  const [paused, o11] = bool.read(data, o);
-  o = o11;
-  const [createdAt, o12] = i64.read(data, o);
-  o = o12;
-  const [bump, o13] = u8.read(data, o);
-  o = o13;
-  const [vaultBump, o14] = u8.read(data, o);
-  o = o14;
-  const [mintBump] = u8.read(data, o);
+  const [authority] = addr.read(data, T.AUTHORITY);
+  const [manager] = addr.read(data, T.MANAGER);
+  const [shareMint] = addr.read(data, T.SHARE_MINT);
+  const [feeRecipient] = addr.read(data, T.FEE_RECIPIENT);
+  const [rentReserve] = u64.read(data, T.RENT_RESERVE);
+  const [depositFeePpm] = u16.read(data, T.DEPOSIT_FEE_PPM);
+  const [redeemFeePpm] = u16.read(data, T.REDEEM_FEE_PPM);
 
   return {
     authority,
+    manager,
     shareMint,
     feeRecipient,
-    ticker,
-    name,
+    ticker: new TextDecoder().decode(
+      data.slice(T.TICKER, T.TICKER + tickerLen) as Uint8Array,
+    ),
+    strategy: data[T.STRATEGY],
     legs,
+    maxLegs,
     depositFeePpm,
     redeemFeePpm,
-    rebalanceInterval,
-    lastRebalanceTs,
-    rebalanceCount,
-    filingDelayDays,
     rentReserve,
-    paused,
-    createdAt,
-    bump,
-    vaultBump,
-    mintBump,
+    paused: data[T.PAUSED] !== 0,
+    bump: data[T.BUMP],
+    vaultBump: data[T.VAULT_BUMP],
+    mintBump: data[T.MINT_BUMP],
   };
 }
 
@@ -236,40 +261,95 @@ export function decodeTokenAmount(data: ReadonlyUint8Array): bigint {
 }
 
 // ── Instruction data ──────────────────────────────────────────────────
+//
+// Built by hand rather than through Kit's struct encoders: every payload here
+// is a one-byte tag followed by fixed-width little-endian fields, which is
+// less code written directly than described to an encoder.
 
-const depositArgsEncoder = getStructEncoder([
-  ["discriminator", getBytesEncoder()],
-  ["lamportsIn", getU64Encoder()],
-  ["minSharesOut", getU64Encoder()],
-]);
+const u16le = (n: number) => {
+  const b = new Uint8Array(2);
+  new DataView(b.buffer).setUint16(0, n, true);
+  return b;
+};
+
+const u64le = (n: bigint) => {
+  const b = new Uint8Array(8);
+  new DataView(b.buffer).setBigUint64(0, n, true);
+  return b;
+};
+
+const concat = (...parts: Uint8Array[]) => {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+};
 
 export function encodeDepositData(lamportsIn: bigint, minSharesOut: bigint) {
-  return depositArgsEncoder.encode({
-    discriminator: IX_DISCRIMINATORS.deposit,
-    lamportsIn,
-    minSharesOut,
-  });
+  return concat(new Uint8Array([IX.deposit]), u64le(lamportsIn), u64le(minSharesOut));
 }
-
-const redeemArgsEncoder = getStructEncoder([
-  ["discriminator", getBytesEncoder()],
-  ["sharesIn", getU64Encoder()],
-  ["minLamportsOut", getU64Encoder()],
-]);
 
 export function encodeRedeemForSolData(
   sharesIn: bigint,
   minLamportsOut: bigint,
 ) {
-  return redeemArgsEncoder.encode({
-    discriminator: IX_DISCRIMINATORS.redeemForSol,
-    sharesIn,
-    minLamportsOut,
-  });
+  return concat(
+    new Uint8Array([IX.redeemForSol]),
+    u64le(sharesIn),
+    u64le(minLamportsOut),
+  );
 }
 
-/** Exported for the init script, which runs in Node rather than the browser. */
-export const stringEncoder = addEncoderSizePrefix(
-  getBytesEncoder(),
-  getU32Encoder(),
-);
+/**
+ * In-kind redemption takes no slippage floor: it delivers a pro-rata slice of
+ * whatever the vault holds, which needs no price and cannot be quoted wrong.
+ */
+export function encodeRedeemInKindData(sharesIn: bigint) {
+  return concat(new Uint8Array([IX.redeemInKind]), u64le(sharesIn));
+}
+
+export function encodeSetFeesData(depositFeePpm: number, redeemFeePpm: number) {
+  return concat(
+    new Uint8Array([IX.setFees]),
+    u16le(depositFeePpm),
+    u16le(redeemFeePpm),
+  );
+}
+
+export function encodeSetPausedData(paused: boolean) {
+  return new Uint8Array([IX.setPaused, paused ? 1 : 0]);
+}
+
+/**
+ * A leg as an instruction carries it: **no feed id**.
+ *
+ * Feed ids travel separately, via [`encodeSetLegFeedData`]. Carrying them
+ * inline made a leg 66 bytes on the wire, so a full sixteen-leg basket was
+ * 1,058 bytes of instruction data and would not fit a 1,232-byte transaction —
+ * `cgSOL` and `aiSOL` were unsendable. At 34 bytes the same basket is 546.
+ *
+ * It also matches how the fields behave: weights move on every filing, feed ids
+ * essentially never move. `write_legs` on the program side carries existing
+ * feed ids forward by mint, so a reweighting never unconfigures an oracle.
+ */
+export type LegInput = {
+  mint: Address;
+  weightBps: number;
+};
+
+export function encodeRebalanceData(legs: LegInput[]) {
+  const enc = getAddressEncoder();
+  return concat(
+    new Uint8Array([IX.rebalance, legs.length]),
+    ...legs.flatMap((l) => [new Uint8Array(enc.encode(l.mint)), u16le(l.weightBps)]),
+  );
+}
+
+/** Point one leg at its Pyth feed. `legIndex` is the position in the basket. */
+export function encodeSetLegFeedData(legIndex: number, feedId: Uint8Array) {
+  if (feedId.length !== 32) throw new Error("feed id must be 32 bytes");
+  return concat(new Uint8Array([IX.setLegFeed, legIndex]), feedId);
+}

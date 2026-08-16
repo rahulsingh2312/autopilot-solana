@@ -29,7 +29,7 @@ async function notifyTelegram(signup: Signup): Promise<boolean> {
   if (!TOKEN || !CHAT_ID) return false;
 
   const lines = [
-    "New Autopilot waitlist signup",
+    "New Copycat waitlist signup",
     "",
     `Email:  ${signup.email}`,
     `Wallet: ${signup.wallet || "not connected"}`,

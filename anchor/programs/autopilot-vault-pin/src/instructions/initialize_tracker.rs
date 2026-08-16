@@ -12,16 +12,25 @@
 //!   separate `set_manager` call, so a creator flow can hand the manager role
 //!   to a stranger without ever handing over the authority.
 
-use pinocchio::cpi::{Seed, Signer};
 use pinocchio::{AccountView, Address, ProgramResult};
-use pinocchio_system::instructions::{CreateAccountAllowPrefund, Funding, Transfer};
-use pinocchio_token::instructions::InitializeMint2;
 
-use crate::accounts::*;
 use crate::constants::*;
 use crate::error::VaultError;
-use crate::state::{
-    tracker_size, validate_legs, Address as RawAddress, TrackerMut, LEG_SIZE, ZERO_ADDRESS,
+use crate::state::{LegSpec, LEG_MINT, LEG_SPEC_SIZE, LEG_WEIGHT_BPS};
+
+/// Imports the on-chain handler needs and the host stub does not.
+///
+/// Scoped rather than module-level because the handler below is compiled out
+/// on a host build without `host-pda`, and unused-import warnings there would
+/// bury the ones that mean something.
+#[cfg(any(target_os = "solana", target_arch = "bpf", feature = "host-pda"))]
+use {
+    crate::accounts::*,
+    crate::create::create_pda_account,
+    crate::state::{tracker_size, validate_legs, TrackerMut},
+    pinocchio::cpi::{Seed, Signer},
+    pinocchio_system::instructions::Transfer,
+    pinocchio_token::instructions::InitializeMint2,
 };
 
 /// Instruction payload, laid out after the one-byte discriminator.
@@ -64,7 +73,7 @@ impl<'a> Args<'a> {
         }
         let leg_count = data[19];
         let legs_len = (leg_count as usize)
-            .checked_mul(LEG_SIZE)
+            .checked_mul(LEG_SPEC_SIZE)
             .ok_or(VaultError::MathOverflow)?;
         // The declared leg count must match the bytes actually supplied, or a
         // short buffer would be read as a basket of zero-mint legs.
@@ -83,15 +92,18 @@ impl<'a> Args<'a> {
         })
     }
 
-    pub fn leg(&self, i: u8) -> Option<(RawAddress, u16)> {
+    pub fn leg(&self, i: u8) -> Option<LegSpec> {
         if i >= self.leg_count {
             return None;
         }
-        let off = (i as usize) * LEG_SIZE;
+        let off = (i as usize) * LEG_SPEC_SIZE;
         let mut mint = [0u8; 32];
-        mint.copy_from_slice(&self.legs[off..off + 32]);
-        let weight = u16::from_le_bytes([self.legs[off + 32], self.legs[off + 33]]);
-        Some((mint, weight))
+        mint.copy_from_slice(&self.legs[off + LEG_MINT..off + LEG_MINT + 32]);
+        let weight_bps = u16::from_le_bytes([
+            self.legs[off + LEG_WEIGHT_BPS],
+            self.legs[off + LEG_WEIGHT_BPS + 1],
+        ]);
+        Some(LegSpec { mint, weight_bps })
     }
 }
 
@@ -125,7 +137,7 @@ pub fn handle(
 
     // Materialize the basket into a fixed array — no allocator here — so the
     // weights can be checked as a whole before a single account is created.
-    let mut legs = [(ZERO_ADDRESS, 0u16); MAX_LEGS as usize];
+    let mut legs = [LegSpec::untokenized(0); MAX_LEGS as usize];
     for i in 0..args.leg_count {
         legs[i as usize] = args.leg(i).ok_or(VaultError::MalformedInstructionData)?;
     }
@@ -177,20 +189,17 @@ pub fn handle(
         Seed::from(&tracker_bump_seed[..]),
     ];
 
-    // `AllowPrefund` rather than plain `CreateAccount`: anyone can send a
-    // lamport to a known PDA before it is initialized, and the plain form
-    // fails on a non-empty balance. That would let a stranger permanently
-    // block a ticker from ever being created, for one lamport.
-    CreateAccountAllowPrefund {
-        to: tracker_ai,
-        space: space as u64,
-        owner: program_id,
-        funding: Some(Funding {
-            from: payer,
-            lamports: rent_exempt_minimum(space as u64),
-        }),
-    }
-    .invoke_signed(&[Signer::from(&tracker_seeds)])?;
+    // Tolerates a prefunded address rather than failing on one: anyone can send
+    // a lamport to a known PDA before it is initialized, and rejecting that
+    // would let a stranger block a ticker forever for one lamport. See
+    // `create::create_pda_account` for why this is three CPIs and not one.
+    create_pda_account(
+        payer,
+        tracker_ai,
+        space as u64,
+        program_id,
+        &[Signer::from(&tracker_seeds)],
+    )?;
 
     // ---- create and initialize the share mint ----
     let mint_space = pinocchio_token::state::Mint::LEN;
@@ -202,16 +211,13 @@ pub fn handle(
         Seed::from(&mint_bump_seed[..]),
     ];
 
-    CreateAccountAllowPrefund {
-        to: share_mint_ai,
-        space: mint_space as u64,
-        owner: &TOKEN_PROGRAM_ID,
-        funding: Some(Funding {
-            from: payer,
-            lamports: rent_exempt_minimum(mint_space as u64),
-        }),
-    }
-    .invoke_signed(&[Signer::from(&mint_seeds)])?;
+    create_pda_account(
+        payer,
+        share_mint_ai,
+        mint_space as u64,
+        &TOKEN_PROGRAM_ID,
+        &[Signer::from(&mint_seeds)],
+    )?;
 
     // Mint authority is the tracker PDA, so only this program can change the
     // share supply. Freeze authority is left unset on purpose: nobody,
@@ -273,7 +279,7 @@ pub fn handle(_: &Address, _: &mut [AccountView], _: &[u8]) -> ProgramResult {
 mod tests {
     use super::*;
 
-    fn encode(ticker: &[u8], max_legs: u8, legs: &[([u8; 32], u16)]) -> std::vec::Vec<u8> {
+    fn encode(ticker: &[u8], max_legs: u8, legs: &[LegSpec]) -> std::vec::Vec<u8> {
         let mut v = std::vec::Vec::new();
         v.resize(ARGS_HEADER_LEN, 0u8);
         v[0] = 0; // strategy
@@ -283,23 +289,23 @@ mod tests {
         v[6] = ticker.len() as u8;
         v[7..7 + ticker.len()].copy_from_slice(ticker);
         v[19] = legs.len() as u8;
-        for (mint, w) in legs {
-            v.extend_from_slice(mint);
-            v.extend_from_slice(&w.to_le_bytes());
+        for l in legs {
+            v.extend_from_slice(&l.mint);
+            v.extend_from_slice(&l.weight_bps.to_le_bytes());
         }
         v
     }
 
     #[test]
     fn parses_a_well_formed_payload() {
-        let data = encode(b"bwSOL", 8, &[([1u8; 32], 6000), ([2u8; 32], 4000)]);
+        let data = encode(b"bwSOL", 8, &[LegSpec { mint: [1u8; 32], weight_bps: 6000 }, LegSpec { mint: [2u8; 32], weight_bps: 4000 }]);
         let a = Args::parse(&data).unwrap();
         assert_eq!(a.ticker, b"bwSOL");
         assert_eq!(a.max_legs, 8);
         assert_eq!(a.leg_count, 2);
         assert_eq!(a.deposit_fee_ppm, 10);
-        assert_eq!(a.leg(0), Some(([1u8; 32], 6000)));
-        assert_eq!(a.leg(1), Some(([2u8; 32], 4000)));
+        assert_eq!(a.leg(0), Some(LegSpec { mint: [1u8; 32], weight_bps: 6000 }));
+        assert_eq!(a.leg(1), Some(LegSpec { mint: [2u8; 32], weight_bps: 4000 }));
         assert_eq!(a.leg(2), None);
     }
 
@@ -307,7 +313,7 @@ mod tests {
     /// not read as a basket padded with zero-mint legs.
     #[test]
     fn rejects_a_leg_count_that_overruns_the_buffer() {
-        let mut data = encode(b"bwSOL", 8, &[([1u8; 32], 10_000)]);
+        let mut data = encode(b"bwSOL", 8, &[LegSpec { mint: [1u8; 32], weight_bps: 10_000 }]);
         data[19] = 4;
         assert_eq!(
             Args::parse(&data).err(),
@@ -319,7 +325,7 @@ mod tests {
     /// cannot smuggle a leg the weight validation never saw.
     #[test]
     fn rejects_trailing_bytes() {
-        let mut data = encode(b"bwSOL", 8, &[([1u8; 32], 10_000)]);
+        let mut data = encode(b"bwSOL", 8, &[LegSpec { mint: [1u8; 32], weight_bps: 10_000 }]);
         data.push(0);
         assert_eq!(
             Args::parse(&data).err(),
@@ -329,7 +335,7 @@ mod tests {
 
     #[test]
     fn rejects_a_bad_ticker() {
-        let mut data = encode(b"bwSOL", 8, &[([1u8; 32], 10_000)]);
+        let mut data = encode(b"bwSOL", 8, &[LegSpec { mint: [1u8; 32], weight_bps: 10_000 }]);
         data[6] = 0;
         assert_eq!(Args::parse(&data).err(), Some(VaultError::InvalidTicker));
         data[6] = (MAX_TICKER_LEN + 1) as u8;

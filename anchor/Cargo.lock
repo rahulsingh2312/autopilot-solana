@@ -676,6 +676,7 @@ dependencies = [
  "pinocchio-token",
  "pinocchio-token-2022",
  "solana-address 2.7.0",
+ "solana-instruction",
  "solana-keypair",
  "solana-message",
  "solana-signer",

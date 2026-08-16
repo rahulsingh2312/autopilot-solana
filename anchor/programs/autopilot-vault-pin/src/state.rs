@@ -21,8 +21,8 @@
 //! `max_legs` legs and never reallocated. Sizing it to the *current* leg count
 //! would be a few bytes cheaper but would make `rebalance` a realloc-plus-rent
 //! transfer — new failure modes in the one admin path that must never strand a
-//! vault mid-update. A tracker that wants room to grow pays ~34 bytes per
-//! spare slot, which is 0.00024 SOL.
+//! vault mid-update. A tracker that wants room to grow pays ~66 bytes per
+//! spare slot, which is 0.00046 SOL.
 
 use crate::constants::*;
 use crate::error::VaultError;
@@ -82,16 +82,103 @@ pub mod tracker {
     pub const HEADER_LEN: usize = LEGS;
 }
 
-/// One position: the mint it is held as, and its target weight.
+/// One position: the mint it is held as, its target weight, and the Pyth feed
+/// that prices the underlying equity.
 ///
 /// The Anchor layout carried a 16-byte `symbol` String here too. Nothing on
 /// chain ever read it — only its length was validated — and it is already in
 /// `web/src/lib/config.ts` and the Metaplex metadata. At 16 legs that string
 /// was 256 bytes per tracker, the single largest piece of dead weight in the
 /// account.
-pub const LEG_SIZE: usize = 34;
+///
+/// # Why `feed_id` lives here now
+///
+/// It used to sit in a separate `LegOracle` PDA, alongside a rebasing
+/// multiplier that a worker pushed over HTTP. The original reasoning was sound
+/// — weights move when a filing lands, the multiplier moves when a corporate
+/// action settles, so they do not belong in one account.
+///
+/// But the multiplier never needed pushing: xStocks carry Token-2022's
+/// **ScaledUiAmount** extension, so the authoritative value is readable
+/// straight off the mint (verified against the live NVDAx and AAPLx mints; see
+/// [`crate::token22`]). Once the multiplier is gone, all that remains is the
+/// feed id, which by the old reasoning's own admission "essentially never
+/// moves" — so it is plain configuration and belongs beside the weight.
+///
+/// That deletes an account type, its PDAs, and the program's only trusted
+/// input, at a cost of 32 bytes per leg.
+pub const LEG_SIZE: usize = 66;
 pub const LEG_MINT: usize = 0;
 pub const LEG_WEIGHT_BPS: usize = 32;
+pub const LEG_FEED_ID: usize = 34;
+
+/// One basket leg, as handlers pass it around.
+///
+/// A struct rather than a tuple because three positional fields — two of which
+/// are 32-byte arrays — is exactly the shape that gets silently transposed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Leg {
+    pub mint: Address,
+    pub weight_bps: u16,
+    /// Pyth feed id for the *underlying equity*, not for the token. Must be
+    /// non-zero whenever `mint` is non-zero.
+    pub feed_id: [u8; 32],
+}
+
+impl Leg {
+    /// A leg whose name has no tokenized equivalent yet: its weight rides in
+    /// the SOL sleeve and it is never valued through an oracle.
+    pub const fn untokenized(weight_bps: u16) -> Self {
+        Self {
+            mint: ZERO_ADDRESS,
+            weight_bps,
+            feed_id: [0u8; 32],
+        }
+    }
+
+    pub fn is_tokenized(&self) -> bool {
+        self.mint != ZERO_ADDRESS
+    }
+}
+
+/// What an instruction payload carries for one leg: **no feed id**.
+///
+/// # Why the feed id is not in the payload
+///
+/// It used to be, and it made 16-leg baskets impossible to send. A leg was 66
+/// bytes on the wire, so sixteen of them is 1,058 bytes of instruction data —
+/// past the 1,232-byte transaction limit once the signature, blockhash and
+/// account keys are counted. `cgSOL` and `aiSOL` have sixteen legs each and
+/// could be neither created nor rebalanced.
+///
+/// At 34 bytes the same basket is 546 bytes and fits with room to spare.
+///
+/// This also matches how the two fields actually behave, which is the argument
+/// that should have decided it the first time: **weights move on every filing,
+/// feed ids essentially never move.** They belong in different instructions.
+/// [`TrackerMut::write_legs`] carries existing feed ids forward by mint, and
+/// [`TrackerMut::set_leg_feed`] is how a new one is set.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LegSpec {
+    pub mint: Address,
+    pub weight_bps: u16,
+}
+
+impl LegSpec {
+    pub const fn untokenized(weight_bps: u16) -> Self {
+        Self {
+            mint: ZERO_ADDRESS,
+            weight_bps,
+        }
+    }
+
+    pub fn is_tokenized(&self) -> bool {
+        self.mint != ZERO_ADDRESS
+    }
+}
+
+/// Bytes one leg occupies in an instruction payload.
+pub const LEG_SPEC_SIZE: usize = 34;
 
 /// Bytes a tracker account holding `max_legs` legs occupies.
 pub const fn tracker_size(max_legs: u8) -> usize {
@@ -210,6 +297,25 @@ impl<'a> Tracker<'a> {
         ))
     }
 
+    /// Pyth feed id for this leg's underlying equity.
+    pub fn leg_feed_id(&self, i: u8) -> Option<[u8; 32]> {
+        if i >= self.leg_count() {
+            return None;
+        }
+        let off = tracker::LEGS + (i as usize) * LEG_SIZE + LEG_FEED_ID;
+        let mut out = [0u8; 32];
+        out.copy_from_slice(&self.0[off..off + 32]);
+        Some(out)
+    }
+
+    pub fn leg(&self, i: u8) -> Option<Leg> {
+        Some(Leg {
+            mint: self.leg_mint(i)?,
+            weight_bps: self.leg_weight_bps(i)?,
+            feed_id: self.leg_feed_id(i)?,
+        })
+    }
+
     /// `mint == ZERO_ADDRESS` means the underlying name has no tokenized
     /// equivalent, so its weight sits in the SOL sleeve rather than being
     /// silently dropped from the basket.
@@ -322,97 +428,91 @@ impl<'a> TrackerMut<'a> {
     /// `legs` is `(mint, weight_bps)` in basket order. Validated before a
     /// single byte is written, so a rejected rebalance leaves the previous
     /// basket exactly as it was rather than half-overwritten.
-    pub fn write_legs(&mut self, legs: &[(Address, u16)]) -> Result<(), VaultError> {
-        validate_legs(legs)?;
-        if legs.len() > self.0[tracker::MAX_LEGS] as usize {
+    /// Replace the basket, carrying existing feed ids forward.
+    ///
+    /// A leg whose mint already appears in the current basket keeps the feed id
+    /// configured for it; a mint that is new gets a zero feed id and needs
+    /// [`Self::set_leg_feed`] before it can be valued. Without this carry-over,
+    /// every routine reweighting would silently unconfigure every oracle.
+    ///
+    /// Valuation fails closed on a zero feed id — it can never match a real
+    /// Pyth account — so an unconfigured leg makes deposits revert rather than
+    /// mispricing them.
+    pub fn write_legs(&mut self, specs: &[LegSpec]) -> Result<(), VaultError> {
+        validate_legs(specs)?;
+        if specs.len() > self.0[tracker::MAX_LEGS] as usize {
             return Err(VaultError::LegCapacityExceeded);
         }
 
-        for (i, (mint, weight)) in legs.iter().enumerate() {
+        // Snapshot the current (mint, feed_id) pairs before anything is
+        // overwritten; the new basket may reorder them.
+        let previous_count = self.0[tracker::LEG_COUNT] as usize;
+        let mut previous = [(ZERO_ADDRESS, [0u8; 32]); MAX_LEGS as usize];
+        for (i, slot) in previous.iter_mut().enumerate().take(previous_count) {
             let off = tracker::LEGS + i * LEG_SIZE;
-            self.0[off + LEG_MINT..off + LEG_MINT + 32].copy_from_slice(mint);
-            write_u16(self.0, off + LEG_WEIGHT_BPS, *weight);
+            let mut mint = [0u8; 32];
+            mint.copy_from_slice(&self.0[off + LEG_MINT..off + LEG_MINT + 32]);
+            let mut feed = [0u8; 32];
+            feed.copy_from_slice(&self.0[off + LEG_FEED_ID..off + LEG_FEED_ID + 32]);
+            *slot = (mint, feed);
+        }
+
+        for (i, spec) in specs.iter().enumerate() {
+            let carried = previous[..previous_count]
+                .iter()
+                .find(|(mint, _)| *mint == spec.mint && spec.is_tokenized())
+                .map(|(_, feed)| *feed)
+                .unwrap_or([0u8; 32]);
+
+            let off = tracker::LEGS + i * LEG_SIZE;
+            self.0[off + LEG_MINT..off + LEG_MINT + 32].copy_from_slice(&spec.mint);
+            write_u16(self.0, off + LEG_WEIGHT_BPS, spec.weight_bps);
+            self.0[off + LEG_FEED_ID..off + LEG_FEED_ID + 32].copy_from_slice(&carried);
         }
         // Zero the tail so a shrinking basket leaves no readable remnant of
         // the old one past `leg_count`.
-        let used = legs.len() * LEG_SIZE;
+        let used = specs.len() * LEG_SIZE;
         let capacity = self.0[tracker::MAX_LEGS] as usize * LEG_SIZE;
         for b in &mut self.0[tracker::LEGS + used..tracker::LEGS + capacity] {
             *b = 0;
         }
 
-        self.0[tracker::LEG_COUNT] = legs.len() as u8;
+        self.0[tracker::LEG_COUNT] = specs.len() as u8;
+        Ok(())
+    }
+
+    /// Point one leg at a Pyth feed.
+    ///
+    /// Separate from `write_legs` because a feed id is configuration that
+    /// outlives any particular basket — and because bundling the two is what
+    /// made a full basket too large to send.
+    pub fn set_leg_feed(&mut self, index: u8, feed_id: &[u8; 32]) -> Result<(), VaultError> {
+        if index >= self.0[tracker::LEG_COUNT] {
+            return Err(VaultError::LegCapacityExceeded);
+        }
+        let off = tracker::LEGS + (index as usize) * LEG_SIZE + LEG_FEED_ID;
+        self.0[off..off + 32].copy_from_slice(feed_id);
         Ok(())
     }
 }
 
 // ---------------------------------------------------------------------------
-// LegOracle
+// Formerly: LegOracle
 // ---------------------------------------------------------------------------
-
-pub mod leg_oracle {
-    pub const TAG: usize = 0;
-    pub const VERSION: usize = 1;
-    pub const BUMP: usize = 2;
-    pub const DECIMALS: usize = 3;
-    pub const TRACKER: usize = 4;
-    pub const MINT: usize = 36;
-    pub const FEED_ID: usize = 68;
-    pub const MULTIPLIER_MICROS: usize = 100;
-    pub const UPDATED_AT: usize = 108;
-    pub const RESERVED: usize = 116;
-
-    pub const LEN: usize = 124;
-}
-
-/// Everything needed to price one tokenized leg, kept beside the tracker
-/// rather than inside it — weights move when a filing lands, the rebasing
-/// multiplier moves when a corporate action settles, and the feed id
-/// essentially never moves at all.
-pub struct LegOracle<'a>(&'a [u8]);
-
-impl<'a> LegOracle<'a> {
-    pub fn load(data: &'a [u8]) -> Result<Self, VaultError> {
-        if data.len() < leg_oracle::LEN {
-            return Err(VaultError::AccountTooSmall);
-        }
-        if data[leg_oracle::TAG] != TAG_LEG_ORACLE {
-            return Err(VaultError::InvalidAccountTag);
-        }
-        if data[leg_oracle::VERSION] != LAYOUT_VERSION {
-            return Err(VaultError::InvalidAccountVersion);
-        }
-        Ok(Self(data))
-    }
-
-    pub fn decimals(&self) -> u8 {
-        self.0[leg_oracle::DECIMALS]
-    }
-    pub fn bump(&self) -> u8 {
-        self.0[leg_oracle::BUMP]
-    }
-    pub fn tracker(&self) -> Address {
-        let mut o = [0u8; 32];
-        o.copy_from_slice(&self.0[leg_oracle::TRACKER..leg_oracle::TRACKER + 32]);
-        o
-    }
-    pub fn mint(&self) -> Address {
-        let mut o = [0u8; 32];
-        o.copy_from_slice(&self.0[leg_oracle::MINT..leg_oracle::MINT + 32]);
-        o
-    }
-    pub fn feed_id(&self) -> [u8; 32] {
-        let mut o = [0u8; 32];
-        o.copy_from_slice(&self.0[leg_oracle::FEED_ID..leg_oracle::FEED_ID + 32]);
-        o
-    }
-    pub fn multiplier_micros(&self) -> u64 {
-        read_u64(self.0, leg_oracle::MULTIPLIER_MICROS)
-    }
-    pub fn updated_at(&self) -> i64 {
-        read_u64(self.0, leg_oracle::UPDATED_AT) as i64
-    }
-}
+//
+// A `LegOracle` PDA used to hold each leg's feed id, decimals, and a rebasing
+// multiplier pushed over HTTP by the tracking worker. All three are gone:
+//
+// - **multiplier** — read from the mint's Token-2022 ScaledUiAmount extension
+//   instead. See `crate::token22`. This removed the program's only trusted
+//   input.
+// - **decimals** — read from the mint, where it always was.
+// - **feed_id** — moved into the tracker's leg entry, since it is plain
+//   configuration that never changes.
+//
+// `TAG_LEG_ORACLE` is deliberately left reserved rather than reused: tag values
+// are forever, and recycling one is how a future account type gets read as an
+// account that no longer exists.
 
 // ---------------------------------------------------------------------------
 // Shared arithmetic
@@ -422,18 +522,26 @@ impl<'a> LegOracle<'a> {
 ///
 /// `mint` is allowed to be the zero address — that is a leg with no tokenized
 /// equivalent, whose weight rides in the SOL sleeve.
-pub fn validate_legs(legs: &[(Address, u16)]) -> Result<(), VaultError> {
-    if legs.is_empty() {
+/// Weights must sum to exactly 10000 bps, and a basket must be non-empty.
+///
+/// Feed ids are deliberately **not** checked here: they no longer travel with
+/// the basket, so a leg can legitimately be written before its feed is set.
+/// The safety net is downstream — `value_tokenized_legs` compares the stored
+/// feed id against the price account it was handed, and a zero feed id matches
+/// no real Pyth account, so an unconfigured leg reverts a deposit instead of
+/// mispricing one.
+pub fn validate_legs(specs: &[LegSpec]) -> Result<(), VaultError> {
+    if specs.is_empty() {
         return Err(VaultError::EmptyBasket);
     }
-    if legs.len() > MAX_LEGS as usize {
+    if specs.len() > MAX_LEGS as usize {
         return Err(VaultError::TooManyLegs);
     }
 
     let mut total: u32 = 0;
-    for (_, weight) in legs {
+    for spec in specs {
         total = total
-            .checked_add(u32::from(*weight))
+            .checked_add(u32::from(spec.weight_bps))
             .ok_or(VaultError::MathOverflow)?;
     }
     if total != WEIGHT_DENOMINATOR {
@@ -508,8 +616,11 @@ mod tests {
     #[test]
     fn header_layout_is_frozen() {
         assert_eq!(tracker::HEADER_LEN, 170);
-        assert_eq!(LEG_SIZE, 34);
-        assert_eq!(leg_oracle::LEN, 124);
+        assert_eq!(LEG_SIZE, 66);
+        assert_eq!(LEG_MINT, 0);
+        assert_eq!(LEG_WEIGHT_BPS, 32);
+        assert_eq!(LEG_FEED_ID, 34);
+        assert_eq!(LEG_SPEC_SIZE, 34);
         // No field may overlap the one after it.
         assert!(tracker::TICKER + MAX_TICKER_LEN <= tracker::AUTHORITY);
         assert!(tracker::AUTHORITY + 32 <= tracker::MANAGER);
@@ -522,14 +633,35 @@ mod tests {
         assert!(tracker::RESERVED + 8 <= tracker::LEGS);
     }
 
-    /// The whole point of the exercise: a real tracker is a fraction of the
-    /// Anchor account, which allocated all 16 legs and a 16-byte symbol each.
+    /// Cheaper than the Anchor layout — but the comparison has to be made on
+    /// *total* footprint, not on the tracker account alone.
+    ///
+    /// Folding `feed_id` in made this account bigger than Anchor's at 16 legs
+    /// (1226 vs 1022 bytes). That reads like a regression and is the opposite
+    /// of one: Anchor also needed a separate 124-byte `LegOracle` PDA per
+    /// tokenized leg, each carrying its own 128 bytes of account overhead. One
+    /// larger account beats one account plus N small ones, because the overhead
+    /// is per account and dwarfs the payload at this size.
     #[test]
-    fn is_much_smaller_than_the_anchor_layout() {
-        let anchor_len = 1022usize;
-        assert_eq!(tracker_size(8), 442);
-        assert!(tracker_size(MAX_LEGS) < anchor_len);
-        assert_eq!(tracker_size(MAX_LEGS), 714);
+    fn is_cheaper_than_the_anchor_layout_in_total() {
+        /// `8 + Tracker::INIT_SPACE` in the Anchor program.
+        const ANCHOR_TRACKER: usize = 1022;
+        /// `8 + LegOracle::INIT_SPACE`, one per tokenized leg.
+        const ANCHOR_LEG_ORACLE: usize = 124;
+
+        assert_eq!(tracker_size(8), 698);
+        assert_eq!(tracker_size(MAX_LEGS), 1226);
+
+        // A realistic tracker: mg7SOL, seven tokenized legs.
+        let legs = 7u64;
+        let pin = rent_exempt_minimum(tracker_size(7) as u64);
+        let anchor = rent_exempt_minimum(ANCHOR_TRACKER as u64)
+            + legs * rent_exempt_minimum(ANCHOR_LEG_ORACLE as u64);
+
+        assert!(
+            pin * 3 < anchor,
+            "expected a >3x saving, got pin={pin} anchor={anchor}"
+        );
     }
 
     #[test]
@@ -579,12 +711,25 @@ mod tests {
         assert_eq!(Tracker::load(&data).err(), Some(VaultError::LegCapacityExceeded));
     }
 
+    /// A tokenized leg as an instruction payload carries it — mint and weight,
+    /// no feed id. Feeds are set separately by `set_leg_feed`.
+    fn leg(seed: u8, weight_bps: u16) -> LegSpec {
+        LegSpec {
+            mint: addr(seed),
+            weight_bps,
+        }
+    }
+
+    fn feed(seed: u8) -> [u8; 32] {
+        [seed.wrapping_add(100); 32]
+    }
+
     #[test]
     fn writes_and_reads_a_basket() {
         let mut data = new_tracker(8);
         {
             let mut t = TrackerMut::load(&mut data).unwrap();
-            t.write_legs(&[(addr(1), 6000), (addr(2), 4000)]).unwrap();
+            t.write_legs(&[leg(1, 6000), leg(2, 4000)]).unwrap();
         }
         let t = Tracker::load(&data).unwrap();
         assert_eq!(t.leg_count(), 2);
@@ -593,12 +738,60 @@ mod tests {
         assert_eq!(t.leg_mint(2), None, "reads past leg_count must return None");
     }
 
+    /// The property that makes a 34-byte payload safe: a rebalance must not
+    /// silently unconfigure every oracle it touches.
+    #[test]
+    fn a_rebalance_carries_feed_ids_forward_by_mint() {
+        let mut data = new_tracker(8);
+        {
+            let mut t = TrackerMut::load(&mut data).unwrap();
+            t.write_legs(&[leg(1, 6000), leg(2, 4000)]).unwrap();
+            t.set_leg_feed(0, &feed(1)).unwrap();
+            t.set_leg_feed(1, &feed(2)).unwrap();
+        }
+        {
+            // Reweight, reorder, and add a new mint.
+            let mut t = TrackerMut::load(&mut data).unwrap();
+            t.write_legs(&[leg(2, 5000), leg(3, 3000), leg(1, 2000)])
+                .unwrap();
+        }
+        let t = Tracker::load(&data).unwrap();
+        assert_eq!(t.leg_feed_id(0), Some(feed(2)), "feed follows its mint");
+        assert_eq!(t.leg_feed_id(1), Some([0u8; 32]), "a new mint starts unset");
+        assert_eq!(t.leg_feed_id(2), Some(feed(1)), "even when reordered");
+    }
+
+    /// An untokenized leg never carries a feed, even if a zero mint appeared
+    /// before — otherwise every sleeve leg would inherit whichever feed the
+    /// previous zero-mint leg happened to hold.
+    #[test]
+    fn untokenized_legs_never_inherit_a_feed() {
+        let mut data = new_tracker(4);
+        let mut t = TrackerMut::load(&mut data).unwrap();
+        t.write_legs(&[LegSpec::untokenized(10_000)]).unwrap();
+        assert!(t.set_leg_feed(0, &feed(7)).is_ok());
+        t.write_legs(&[LegSpec::untokenized(10_000)]).unwrap();
+        assert_eq!(t.as_ref().leg_feed_id(0), Some([0u8; 32]));
+    }
+
+    #[test]
+    fn set_leg_feed_refuses_an_index_past_the_basket() {
+        let mut data = new_tracker(4);
+        let mut t = TrackerMut::load(&mut data).unwrap();
+        t.write_legs(&[leg(1, 10_000)]).unwrap();
+        assert!(t.set_leg_feed(0, &feed(1)).is_ok());
+        assert_eq!(
+            t.set_leg_feed(1, &feed(1)),
+            Err(VaultError::LegCapacityExceeded)
+        );
+    }
+
     #[test]
     fn weights_must_sum_to_one_hundred_percent() {
         let mut data = new_tracker(8);
         let mut t = TrackerMut::load(&mut data).unwrap();
         assert_eq!(
-            t.write_legs(&[(addr(1), 6000), (addr(2), 3999)]),
+            t.write_legs(&[leg(1, 6000), leg(2, 3999)]),
             Err(VaultError::WeightsNotOneHundredPercent)
         );
         assert_eq!(t.write_legs(&[]), Err(VaultError::EmptyBasket));
@@ -611,8 +804,8 @@ mod tests {
         let mut data = new_tracker(8);
         {
             let mut t = TrackerMut::load(&mut data).unwrap();
-            t.write_legs(&[(addr(1), 10_000)]).unwrap();
-            assert!(t.write_legs(&[(addr(9), 5000), (addr(8), 4000)]).is_err());
+            t.write_legs(&[leg(1, 10_000)]).unwrap();
+            assert!(t.write_legs(&[leg(9, 5000), leg(8, 4000)]).is_err());
         }
         let t = Tracker::load(&data).unwrap();
         assert_eq!(t.leg_count(), 1);
@@ -626,9 +819,9 @@ mod tests {
         let mut data = new_tracker(8);
         {
             let mut t = TrackerMut::load(&mut data).unwrap();
-            t.write_legs(&[(addr(1), 5000), (addr(2), 3000), (addr(3), 2000)])
+            t.write_legs(&[leg(1, 5000), leg(2, 3000), leg(3, 2000)])
                 .unwrap();
-            t.write_legs(&[(addr(4), 10_000)]).unwrap();
+            t.write_legs(&[leg(4, 10_000)]).unwrap();
         }
         let stale = &data[tracker::LEGS + LEG_SIZE..tracker::LEGS + LEG_SIZE * 3];
         assert!(stale.iter().all(|b| *b == 0));
@@ -639,7 +832,7 @@ mod tests {
         let mut data = new_tracker(2);
         let mut t = TrackerMut::load(&mut data).unwrap();
         assert_eq!(
-            t.write_legs(&[(addr(1), 4000), (addr(2), 3000), (addr(3), 3000)]),
+            t.write_legs(&[leg(1, 4000), leg(2, 3000), leg(3, 3000)]),
             Err(VaultError::LegCapacityExceeded)
         );
     }
@@ -651,7 +844,7 @@ mod tests {
         let mut data = new_tracker(4);
         {
             let mut t = TrackerMut::load(&mut data).unwrap();
-            t.write_legs(&[(addr(1), 6000), (ZERO_ADDRESS, 4000)]).unwrap();
+            t.write_legs(&[leg(1, 6000), LegSpec::untokenized(4000)]).unwrap();
         }
         let t = Tracker::load(&data).unwrap();
         assert_eq!(t.leg_count(), 2);
@@ -719,6 +912,6 @@ mod tests {
     fn rent_math_matches_the_runtime_formula() {
         // A data-less vault PDA: 128 bytes of overhead only.
         assert_eq!(rent_exempt_minimum(0), 890_880);
-        assert_eq!(rent_exempt_minimum(tracker_size(8) as u64), 3_967_200);
+        assert_eq!(rent_exempt_minimum(tracker_size(8) as u64), 5_748_960);
     }
 }

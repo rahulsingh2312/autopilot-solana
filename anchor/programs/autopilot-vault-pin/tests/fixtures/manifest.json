@@ -1,0 +1,20 @@
+{
+  "pyth_sol_usd": {
+    "address": "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE",
+    "owner": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
+    "lamports": 1825031,
+    "len": 134
+  },
+  "pyth_nvda_usd": {
+    "address": "2w1Tg1XTZbUib7srfRoStJ4v5JXVsK7roQEGMsMaGZFC",
+    "owner": "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
+    "lamports": 1823520,
+    "len": 134
+  },
+  "mint_nvdax": {
+    "address": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "owner": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+    "lamports": 617943468,
+    "len": 679
+  }
+}

@@ -28,7 +28,7 @@
 //! the vault. That is fine while every tracker is ours and fatal the moment a
 //! stranger launches one. The layout splits it:
 //!
-//! - `manager` — rebalance, swap, push multipliers, set token metadata.
+//! - `manager` — rebalance, swap, set token metadata.
 //!   Full control over *what the basket holds*. This is what a creator gets.
 //! - `authority` — fees, pause, emergency withdrawals, role changes, close.
 //!   Everything that can reach holder funds. This stays with the deployer,
@@ -43,9 +43,13 @@ extern crate std;
 
 pub mod accounts;
 pub mod constants;
+pub mod create;
 pub mod error;
 pub mod instructions;
+pub mod oracle;
+pub mod spl;
 pub mod state;
+pub mod token22;
 
 use error::VaultError;
 use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
@@ -77,16 +81,18 @@ pub enum Instruction {
     // --- manager ---
     Rebalance = 4,
     SwapLeg = 5,
-    PushMultiplier = 6,
-    SetTokenMetadata = 7,
+    SetTokenMetadata = 6,
     // --- authority ---
-    SetPaused = 8,
-    SetFees = 9,
-    EmergencyWithdrawSol = 10,
-    EmergencyWithdrawToken = 11,
-    SetAuthority = 12,
-    SetManager = 13,
-    CloseTracker = 14,
+    SetPaused = 7,
+    SetFees = 8,
+    EmergencyWithdrawSol = 9,
+    EmergencyWithdrawToken = 10,
+    SetAuthority = 11,
+    SetManager = 12,
+    CloseTracker = 13,
+    /// Appended rather than slotted in beside `Rebalance`: inserting a variant
+    /// renumbers every one after it, and these values are the wire format.
+    SetLegFeed = 14,
 }
 
 impl Instruction {
@@ -98,15 +104,15 @@ impl Instruction {
             3 => Self::RedeemInKind,
             4 => Self::Rebalance,
             5 => Self::SwapLeg,
-            6 => Self::PushMultiplier,
-            7 => Self::SetTokenMetadata,
-            8 => Self::SetPaused,
-            9 => Self::SetFees,
-            10 => Self::EmergencyWithdrawSol,
-            11 => Self::EmergencyWithdrawToken,
-            12 => Self::SetAuthority,
-            13 => Self::SetManager,
-            14 => Self::CloseTracker,
+            6 => Self::SetTokenMetadata,
+            7 => Self::SetPaused,
+            8 => Self::SetFees,
+            9 => Self::EmergencyWithdrawSol,
+            10 => Self::EmergencyWithdrawToken,
+            11 => Self::SetAuthority,
+            12 => Self::SetManager,
+            13 => Self::CloseTracker,
+            14 => Self::SetLegFeed,
             _ => return Err(VaultError::UnknownInstruction),
         })
     }
@@ -119,7 +125,7 @@ impl Instruction {
             Self::InitializeTracker => Role::Payer,
             Self::Deposit | Self::RedeemForSol | Self::RedeemInKind => Role::Anyone,
 
-            Self::Rebalance | Self::SwapLeg | Self::PushMultiplier | Self::SetTokenMetadata => {
+            Self::Rebalance | Self::SwapLeg | Self::SetTokenMetadata | Self::SetLegFeed => {
                 Role::Manager
             }
 
@@ -157,14 +163,49 @@ pub fn process_instruction(
 
     let ix = Instruction::from_u8(*tag).map_err(ProgramError::from)?;
 
-    // Remaining handlers land one at a time, each with its account checks
-    // written out and a differential test against the Anchor program before
-    // the next one starts. Failing closed until then is the point: an
-    // unimplemented handler must never be a permissive one.
+    // Every discriminator now resolves to a handler. The `NotImplemented` arm
+    // is kept as a compile-time reminder rather than deleted: adding a variant
+    // to `Instruction` without wiring it must fail closed, never fall through
+    // to something permissive.
     match ix {
         Instruction::InitializeTracker => {
             instructions::initialize_tracker::handle(program_id, accounts, payload)
         }
+        Instruction::Deposit => instructions::deposit::handle(program_id, accounts, payload),
+        Instruction::RedeemForSol => {
+            instructions::redeem_for_sol::handle(program_id, accounts, payload)
+        }
+        Instruction::RedeemInKind => {
+            instructions::redeem_in_kind::handle(program_id, accounts, payload)
+        }
+        Instruction::Rebalance => instructions::rebalance::handle(program_id, accounts, payload),
+        Instruction::SetLegFeed => {
+            instructions::rebalance::handle_set_leg_feed(program_id, accounts, payload)
+        }
+        Instruction::SwapLeg => instructions::swap_leg::handle(program_id, accounts, payload),
+        Instruction::SetTokenMetadata => {
+            instructions::set_token_metadata::handle(program_id, accounts, payload)
+        }
+        Instruction::SetPaused => {
+            instructions::admin::handle_set_paused(program_id, accounts, payload)
+        }
+        Instruction::SetFees => instructions::admin::handle_set_fees(program_id, accounts, payload),
+        Instruction::SetAuthority => {
+            instructions::admin::handle_set_authority(program_id, accounts, payload)
+        }
+        Instruction::SetManager => {
+            instructions::admin::handle_set_manager(program_id, accounts, payload)
+        }
+        Instruction::EmergencyWithdrawSol => {
+            instructions::admin::handle_emergency_withdraw_sol(program_id, accounts, payload)
+        }
+        Instruction::EmergencyWithdrawToken => {
+            instructions::admin::handle_emergency_withdraw_token(program_id, accounts, payload)
+        }
+        Instruction::CloseTracker => {
+            instructions::admin::handle_close_tracker(program_id, accounts, payload)
+        }
+        #[allow(unreachable_patterns)]
         _ => Err(VaultError::NotImplemented.into()),
     }
 }
@@ -207,8 +248,8 @@ mod tests {
         for ix in [
             Instruction::Rebalance,
             Instruction::SwapLeg,
-            Instruction::PushMultiplier,
             Instruction::SetTokenMetadata,
+            Instruction::SetLegFeed,
         ] {
             assert_eq!(ix.required_role(), Role::Manager, "{ix:?}");
         }

@@ -5,7 +5,7 @@ import { AdminConsole } from "./console";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
-  title: "Autopilot — operations",
+  title: "Copycat, operations",
   robots: { index: false, follow: false },
 };
 

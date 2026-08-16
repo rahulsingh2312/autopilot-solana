@@ -32,6 +32,16 @@ pub const TOKEN_PROGRAM_ID: Address = Address::new_from_array([
     95, 91, 55, 145, 58, 140, 245, 133, 126, 255, 0, 169,
 ]);
 
+/// SPL Token-2022. The tokenized equity legs are Token-2022 mints — with a
+/// permanent delegate, a pausable config and a scaled-UI-amount multiplier — so
+/// any path that touches a leg has to accept this program as well as the
+/// classic one. Pinning either alone makes half the program's accounts
+/// unreadable, which is the bug `swap_leg`'s comment records having hit once.
+pub const TOKEN_2022_PROGRAM_ID: Address = Address::new_from_array([
+    6, 221, 246, 225, 238, 117, 143, 222, 24, 66, 93, 188, 228, 108, 205, 218, 182, 26, 252, 77,
+    131, 185, 13, 39, 254, 189, 249, 40, 216, 161, 139, 252,
+]);
+
 #[inline]
 pub fn require_signer(a: &AccountView) -> Result<(), VaultError> {
     if a.is_signer() {

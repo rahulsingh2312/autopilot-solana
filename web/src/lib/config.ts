@@ -18,7 +18,19 @@ export const RPC_WS_URL =
 
 export const CHAIN = `solana:${CLUSTER}` as const;
 
-export const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
+/**
+ * The Pinocchio program. Same product, a quarter of the binary.
+ *
+ * This is a *different program id* from the Anchor deployment
+ * (`8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK`), so every PDA derived from
+ * it is different too: the trackers, vaults and share mints seeded under the
+ * old program are unreachable through this client and have to be re-created.
+ * Nothing migrates — the seeds are the same but the program id is part of the
+ * derivation.
+ */
+export const PROGRAM_ID =
+  process.env.NEXT_PUBLIC_PROGRAM_ID ??
+  "7Z3DAC8q4vgFr2ofxXonHT2jgJx3xk1bmQHsRjUmVAnY";
 
 /**
  * How often a tracker's source is re-read for changes, in seconds.
@@ -30,10 +42,10 @@ export const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
 export const WATCH_SECONDS = 30;
 
 export const BRAND = {
-  name: "Autopilot",
-  wordmark: "AUTOPILOT",
-  byline: "by Autopilot",
-  domain: "autopilot-solana.vercel.app",
+  name: "Copycat",
+  wordmark: "COPYCAT",
+  byline: "by Copycat",
+  domain: "sol.copycat.my",
   tagline: "Famous portfolios, one token each.",
   contactEmail: "rahulsinghhh2312@gmail.com",
   repo: "https://github.com/rahulsingh2312/autopilot-solana",
@@ -107,12 +119,12 @@ export const TRACKERS: TrackerConfig[] = [
       "Six of the most-shouted-about names on cable, held as tokenized equities. An index built from a running joke, and we run it seriously: fixed weights, monthly rebalance, every move on chain.",
       "For the record, the meme has been measured. Quiver Quantitative backtests an inverse-Cramer strategy from January 2021 at a 42.7% win rate over 3,427 trades, a Sharpe of -0.171 and -13.99% in the last year. The ETF that tried it, SJIM, closed in February 2024. This index is editorial, not a filing.",
     ],
-    source: "Editorial. Curated by Autopilot from Mad Money coverage.",
+    source: "Editorial. Curated by Copycat from Mad Money coverage.",
     sourceUrl: "https://www.cnbc.com/mad-money/",
     rebalance: "On each new disclosure",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Autopilot picks these names. No regulator, no filing, no rule you can audit. If you want holdings somebody else is legally on the hook for, this is not it.",
+      "Copycat picks these names. No regulator, no filing, no rule you can audit. If you want holdings somebody else is legally on the hook for, this is not it.",
     legs: [
       { symbol: "NVDA", company: "NVIDIA", weightBps: 2500, tokenized: true, xstock: "NVDAx" },
       { symbol: "TSLA", company: "Tesla", weightBps: 2000, tokenized: true, xstock: "TSLAx" },
@@ -280,12 +292,12 @@ export const TRACKERS: TrackerConfig[] = [
       "Nvidia, Microsoft, Apple, Amazon, Alphabet, Meta and Tesla. Between them they are roughly a third of the S&P 500, which means most people who think they own a diversified index mostly own these seven.",
       "Held at equal weight rather than by market cap. A cap-weighted version would put close to a quarter of the basket in one name and turn the other six into rounding errors; equal weight is a decision to hold the group rather than the leader.",
     ],
-    source: "Editorial. Curated by Autopilot.",
+    source: "Editorial. Curated by Copycat.",
     sourceUrl: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/",
     rebalance: "Quarterly, back to equal weight",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Autopilot picks these names. There is no filing, no index provider, and no rule you can audit — the membership of the \u201cMagnificent Seven\u201d is a press coinage, not a definition. It is also seven correlated US technology companies, so this is a concentrated bet dressed as a basket.",
+      "Copycat picks these names. There is no filing, no index provider, and no rule you can audit — the membership of the \u201cMagnificent Seven\u201d is a press coinage, not a definition. It is also seven correlated US technology companies, so this is a concentrated bet dressed as a basket.",
     legs: [
       { symbol: "NVDA", company: "NVIDIA", weightBps: 1429, tokenized: true, xstock: "NVDAx" },
       { symbol: "MSFT", company: "Microsoft", weightBps: 1429, tokenized: true, xstock: "MSFTx" },
@@ -310,12 +322,12 @@ export const TRACKERS: TrackerConfig[] = [
       "Sixteen companies, equal weighted, covering the AI supply chain end to end. ASML makes the machines that print the chips; TSMC prints them; Nvidia, AMD, Broadcom, Marvell and Intel design them; Micron, SK Hynix and SanDisk supply the memory and storage they starve without; Microsoft, Alphabet, Amazon, Meta and Oracle buy the result and rent it out; Palantir sells the deployment layer on top.",
       "Equal weight is the point. A cap-weighted version of this is just Nvidia with a long tail, and the interesting claim is that the buildout pays the whole chain \u2014 including the unglamorous parts \u2014 not only the company everyone already owns.",
     ],
-    source: "Editorial. Curated by Autopilot.",
+    source: "Editorial. Curated by Copycat.",
     sourceUrl: "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=NVDA&type=10-K",
     rebalance: "Quarterly, back to equal weight",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Autopilot picks these names, and picked them knowing how they had already done. Sixteen holdings in one theme is not diversification, it is a single trade on capital expenditure continuing. Liquidity across the stack is also wildly uneven \u2014 Nvidia trades in millions on chain, several of the memory and equipment names in hundreds \u2014 so the weights are real but most of this basket could not be rebalanced at size today. The holdings list names which ones.",
+      "Copycat picks these names, and picked them knowing how they had already done. Sixteen holdings in one theme is not diversification, it is a single trade on capital expenditure continuing. Liquidity across the stack is also wildly uneven \u2014 Nvidia trades in millions on chain, several of the memory and equipment names in hundreds \u2014 so the weights are real but most of this basket could not be rebalanced at size today. The holdings list names which ones.",
     legs: [
       { symbol: "NVDA", company: "NVIDIA", weightBps: 625, tokenized: true, xstock: "NVDAx" },
       { symbol: "GOOGL", company: "Alphabet", weightBps: 625, tokenized: true, xstock: "GOOGLx" },
