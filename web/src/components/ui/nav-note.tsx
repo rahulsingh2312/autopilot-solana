@@ -6,7 +6,7 @@
  * definition rather than an assumption that everyone knows.
  */
 export const NAV_DEFINITION =
-  "NAV, or net asset value, is what one token is worth: everything the vault holds divided by the tokens outstanding. It is the price you mint at and the price you redeem at.";
+  "NAV is what one token is worth: everything the vault holds, divided by tokens outstanding. You mint and redeem at it.";
 
 /** The marker itself. Superscript, keyboard reachable, explains on hover. */
 export function NavStar({ className = "" }: { className?: string }) {

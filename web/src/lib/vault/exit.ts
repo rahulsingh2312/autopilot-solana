@@ -32,6 +32,7 @@
 
 import {
   AccountRole,
+  getAddressDecoder,
   appendTransactionMessageInstructions,
   compressTransactionMessageUsingAddressLookupTables,
   createTransactionMessage,
@@ -123,15 +124,34 @@ export async function planSwapToSol(params: {
   owner: Address;
   leg: ExitLeg;
   amount: bigint;
+  /** Needed to read lookup tables Jupiter names but does not inline. */
+  fetchLookupTables?: (addresses: Address[]) => Promise<Record<string, Address[]>>;
 }): Promise<SwapPlan | null> {
   const { owner, leg, amount } = params;
   if (amount <= 0n) return null;
 
-  const quoteUrl =
-    `${JUP_API}/quote?inputMint=${leg.mint}&outputMint=${WSOL_MINT}` +
-    `&amount=${amount}&slippageBps=${SLIPPAGE_BPS}&maxAccounts=${MAX_ACCOUNTS}`;
+  /**
+   * Direct first, and it is a size decision rather than a price one.
+   *
+   * A one-hop route touches one pool; two hops touch two, and the second
+   * pool's accounts are what push a transaction past 1232 bytes. Measured on
+   * habitSOL's legs, the multi-hop routes came back at 1296 bytes for a single
+   * swap — over the limit on its own.
+   */
+  const attempts = [
+    `&onlyDirectRoutes=true`,
+    `&maxAccounts=${MAX_ACCOUNTS}`,
+    ``,
+  ];
 
-  const quote = await fetch(quoteUrl).then((r) => r.json());
+  let quote: { outAmount?: string; otherAmountThreshold?: string; routePlan?: { swapInfo: { label: string } }[] } | null = null;
+  for (const extra of attempts) {
+    const q = await fetch(
+      `${JUP_API}/quote?inputMint=${leg.mint}&outputMint=${WSOL_MINT}` +
+        `&amount=${amount}&slippageBps=${SLIPPAGE_BPS}${extra}`,
+    ).then((r) => r.json());
+    if (q?.outAmount) { quote = q; break; }
+  }
   if (!quote?.outAmount) return null;
 
   const built = await fetch(`${JUP_API}/swap-instructions`, {
@@ -164,11 +184,25 @@ export async function planSwapToSol(params: {
     ...(built.cleanupInstruction ? [toInstruction(built.cleanupInstruction)] : []),
   ];
 
+  /**
+   * Resolve the route's lookup tables.
+   *
+   * Jupiter returns `addressesByLookupTableAddress` only sometimes; when it
+   * does not, `addressLookupTableAddresses` still names them and the contents
+   * have to be read from chain. Skipping that step is not a missed
+   * optimisation — an uncompressed route is over the transaction limit on its
+   * own, so the swap simply cannot be sent.
+   */
   const lookupTables: Record<string, Address[]> = {};
   for (const [table, addresses] of Object.entries(
     (built.addressesByLookupTableAddress ?? {}) as Record<string, string[]>,
   )) {
     lookupTables[table] = addresses as Address[];
+  }
+  const named: Address[] = (built.addressLookupTableAddresses ?? []) as Address[];
+  const missing = named.filter((t) => !lookupTables[t]);
+  if (missing.length > 0 && params.fetchLookupTables) {
+    Object.assign(lookupTables, await params.fetchLookupTables(missing));
   }
 
   return {
@@ -176,7 +210,7 @@ export async function planSwapToSol(params: {
     mint: leg.mint,
     amount,
     expectedLamports: BigInt(quote.outAmount),
-    minLamports: BigInt(quote.otherAmountThreshold),
+    minLamports: BigInt(quote.otherAmountThreshold ?? quote.outAmount),
     instructions,
     lookupTables,
     routeLabel: (quote.routePlan ?? [])
@@ -283,4 +317,118 @@ export async function sendSwapPlan(
     await new Promise((r) => setTimeout(r, 1000));
   }
   throw new Error("timed out confirming the sale");
+}
+
+/**
+ * Bundle as many sales into each transaction as will fit.
+ *
+ * Two hard ceilings, and they bite in different orders depending on the routes:
+ * 1232 bytes, and 64 unique account addresses. Measured on habitSOL's four
+ * legs, three sales fit in 1131 bytes and the fourth trips the account limit —
+ * so the exit is two transactions rather than four. Uncompressed it was one
+ * swap per transaction and not even that, since a single multi-hop route came
+ * to 1296 bytes on its own.
+ *
+ * Greedy rather than optimal: add until it stops fitting, then start a new
+ * batch. An optimal packing would save at most one signature and would need to
+ * re-quote to find out.
+ */
+export async function packSwapPlans(
+  plans: SwapPlan[],
+  buildMessage: (subset: SwapPlan[]) => Promise<number>,
+): Promise<SwapPlan[][]> {
+  const batches: SwapPlan[][] = [];
+  let current: SwapPlan[] = [];
+
+  for (const plan of plans) {
+    const candidate = [...current, plan];
+    let fits = false;
+    try {
+      fits = (await buildMessage(candidate)) <= 1232;
+    } catch {
+      // Throwing means a structural limit — the account ceiling — rather than
+      // a size one. Same answer either way: it does not fit.
+      fits = false;
+    }
+    if (fits) {
+      current = candidate;
+      continue;
+    }
+    if (current.length > 0) batches.push(current);
+    current = [plan];
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+/** Send one batch of sales as a single transaction. */
+export async function sendSwapBatch(
+  client: Parameters<typeof sendSwapPlan>[0],
+  batch: SwapPlan[],
+  abortSignal?: AbortSignal,
+): Promise<string> {
+  const merged: SwapPlan = {
+    ...batch[0],
+    instructions: batch.flatMap((p) => p.instructions),
+    lookupTables: Object.assign({}, ...batch.map((p) => p.lookupTables)),
+  };
+  return sendSwapPlan(client, merged, abortSignal);
+}
+
+/**
+ * Read lookup tables from chain.
+ *
+ * An ALT account is a 56-byte header followed by packed 32-byte addresses.
+ * Needed because Jupiter names the tables a route uses but does not always
+ * inline their contents, and without the contents the message cannot be
+ * compressed — which for these routes means it cannot be sent at all.
+ */
+export async function fetchLookupTables(
+  client: { rpc: { getMultipleAccounts: (a: Address[], c: object) => { send: () => Promise<{ value: ({ data: [string, string] } | null)[] }> } } },
+  addresses: Address[],
+): Promise<Record<string, Address[]>> {
+  if (addresses.length === 0) return {};
+  const { value } = await client.rpc
+    .getMultipleAccounts(addresses, { encoding: "base64", commitment: "confirmed" })
+    .send();
+
+  const decoder = getAddressDecoder();
+  const tables: Record<string, Address[]> = {};
+  value.forEach((info, i) => {
+    if (!info) return;
+    const data = Uint8Array.from(atob(info.data[0]), (c) => c.charCodeAt(0));
+    const list: Address[] = [];
+    for (let o = 56; o + 32 <= data.length; o += 32) {
+      list.push(decoder.decode(data.subarray(o, o + 32)));
+    }
+    tables[addresses[i]] = list;
+  });
+  return tables;
+}
+
+/**
+ * Serialized size of a batch, used to decide whether it fits.
+ *
+ * Signs with the real signer because a signature is 64 bytes and leaving it
+ * out would under-measure by exactly enough to matter at the boundary.
+ */
+export async function measureBatch(
+  client: Parameters<typeof sendSwapPlan>[0],
+  batch: SwapPlan[],
+): Promise<number> {
+  if (batch.length === 0) return 0;
+  const { value: blockhash } = await client.rpc.getLatestBlockhash().send();
+  const alts = Object.assign({}, ...batch.map((p) => p.lookupTables));
+
+  let message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(client.payer, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash as never, m),
+    (m) => appendTransactionMessageInstructions(batch.flatMap((p) => p.instructions), m),
+  );
+  if (Object.keys(alts).length > 0) {
+    message = compressTransactionMessageUsingAddressLookupTables(message, alts) as typeof message;
+  }
+  const signed = await signTransactionMessageWithSigners(message);
+  return Uint8Array.from(atob(getBase64EncodedWireTransaction(signed)), (c) => c.charCodeAt(0)).length;
 }

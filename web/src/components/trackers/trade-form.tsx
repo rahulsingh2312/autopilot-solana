@@ -17,7 +17,13 @@ import {
 } from "@/lib/format";
 import { findAssociatedTokenPda } from "@/lib/vault/program";
 import { buildOracleAccounts, findAssociatedTokenPdaFor } from "@/lib/vault/oracle";
-import { planSwapToSol, sendSwapPlan } from "@/lib/vault/exit";
+import {
+  fetchLookupTables,
+  measureBatch,
+  packSwapPlans,
+  planSwapToSol,
+  sendSwapBatch,
+} from "@/lib/vault/exit";
 import { tokenProgramOfMint } from "@/lib/leg-bindings";
 import {
   explainTransactionError,
@@ -195,8 +201,12 @@ export function TradeForm({
     // In-kind delivery needs, per leg in basket order: the mint, the vault's
     // token account, and the holder's. No oracle accounts — this path never
     // consults a price, which is exactly why it still works when one is stale.
+    // Both the in-kind tab and the sell-through exit burn shares for the
+    // basket; they differ only in what happens to it afterwards.
+    const takesBasket = mode === "stocks" || sellThrough;
+
     const legAccounts: Address[] = [];
-    if (mode === "stocks") {
+    if (takesBasket) {
       for (const h of snapshot.holdings) {
         const tokenProgram = tokenProgramOfMint(h.mint) as Address;
         legAccounts.push(
@@ -208,7 +218,7 @@ export function TradeForm({
     }
 
     const instruction =
-      mode === "stocks"
+      takesBasket
         ? getRedeemInKindInstruction({
             holder: owner,
             tracker: snapshot.trackerAddress,
@@ -253,7 +263,7 @@ export function TradeForm({
             }),
             instruction,
           ]
-        : mode === "stocks"
+        : takesBasket
           ? [
               // The program creates nothing, so the holder needs a token
               // account for every leg before it can be paid into. Idempotent,
@@ -289,40 +299,60 @@ export function TradeForm({
      * arrived.
      */
     if (sellThrough) {
-      setStep(`Taking the basket (1 of ${snapshot.holdings.length + 1})`);
+      setStep("Taking the basket out");
       await client.sendTransaction(instructions, { abortSignal: signal });
 
-      let last = "";
-      for (const [i, h] of snapshot.holdings.entries()) {
+      // Quoted against what actually landed. `redeem_in_kind` pays
+      // `vault_balance × shares ÷ supply`, and the vault's balance can move
+      // between quoting and signing, so the amounts are read rather than
+      // assumed.
+      setStep("Pricing the sale");
+      const plans = [];
+      const kept: string[] = [];
+      for (const h of snapshot.holdings) {
         const tokenProgram = tokenProgramOfMint(h.mint) as Address;
         const ata = await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram);
-
-        // What actually landed, not what was projected.
         const { value } = await client.rpc
           .getTokenAccountBalance(ata, { commitment: "confirmed" })
           .send();
         const balance = BigInt(value.amount);
-        if (balance === 0n) continue;
-
         const symbol = tracker.legs[h.index]?.symbol ?? "leg";
-        setStep(`Selling ${symbol} (${i + 2} of ${snapshot.holdings.length + 1})`);
+        if (balance === 0n) continue;
 
         const plan = await planSwapToSol({
           owner,
           leg: { mint: h.mint as Address, symbol, decimals: h.decimals },
           amount: balance,
+          fetchLookupTables: (addresses) => fetchLookupTables(client as never, addresses),
         });
-        // A leg with no route at this size is left with the holder rather than
-        // failing the whole exit. They keep the asset, and the message says so.
-        if (!plan) continue;
+        // No route at this size leaves the holder the asset rather than
+        // failing the exit they already paid a signature for.
+        if (!plan) { kept.push(symbol); continue; }
+        plans.push(plan);
+      }
 
-        last = await sendSwapPlan(client as never, plan, signal);
+      const batches = await packSwapPlans(plans, (subset) =>
+        measureBatch(client as never, subset),
+      );
+
+      let last = "";
+      for (const [i, batch] of batches.entries()) {
+        setStep(
+          batches.length === 1
+            ? "Selling the basket"
+            : `Selling ${batch.map((p) => p.symbol).join(", ")} (${i + 1} of ${batches.length})`,
+        );
+        last = await sendSwapBatch(client as never, batch, signal);
       }
 
       setStep(null);
       onSettled();
       refreshSol();
       refreshShares();
+      if (kept.length > 0) {
+        // Not an error: the position was exited, some of it as stock.
+        console.warn(`kept as stock, no route: ${kept.join(", ")}`);
+      }
       return last;
     }
 
@@ -337,6 +367,7 @@ export function TradeForm({
     return result.context.signature as string;
   });
 
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars -- read below */
   /**
    * Whether selling for SOL has to go the long way round.
    *
@@ -483,13 +514,8 @@ export function TradeForm({
               wallet. */}
           {sellThrough ? (
             <p className="border-t border-rule pt-2 text-[0.75rem] text-muted">
-              The vault holds {formatSol(snapshot.sleeveLamports)} SOL and the rest in
-              stock, so this takes the basket out and sells it for you through Jupiter:{" "}
-              <strong className="font-medium text-ink">
-                {snapshot.holdings.length + 1} transactions
-              </strong>{" "}
-              to sign. You pay the swap costs, and anything without a route at this size
-              stays in your wallet as stock.
+              The vault holds stock, so this sells it for you on the way out. A
+              couple of transactions to sign.
             </p>
           ) : null}
 
@@ -521,14 +547,6 @@ export function TradeForm({
                 </span>
               </dt>
               <dd className="num tabular-nums">{formatSol(quote.fee)} SOL</dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt>Minimum after slippage</dt>
-              <dd className="num tabular-nums">
-                {mode === "buy"
-                  ? formatShares(quote.minOut)
-                  : `${formatSol(quote.minOut)} SOL`}
-              </dd>
             </div>
             </>
             )}
