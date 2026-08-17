@@ -48,6 +48,21 @@ const COOLDOWN_MS = 30_000;
 const lastPrepared = new Map<string, number>();
 const inFlight = new Set<string>();
 
+/**
+ * A second limit, per tracker rather than per wallet.
+ *
+ * The per-wallet cooldown stops one holder looping quickly; it does nothing
+ * about several wallets taking turns, and shares can be split across as many
+ * wallets as somebody cares to fund. What has to be bounded is how often the
+ * *vault* can be made to trade, because that is what costs the other holders.
+ *
+ * Sales that raise nothing — because the sleeve already covers the claim —
+ * do not count against it, so ordinary redemptions in a cash-rich vault are
+ * never throttled.
+ */
+const VAULT_COOLDOWN_MS = 60_000;
+const lastVaultSale = new Map<string, number>();
+
 /** Selling can take a few Jupiter round trips and several confirmations. */
 export const maxDuration = 60;
 
@@ -119,6 +134,16 @@ export async function POST(request: Request) {
     );
   }
 
+  if (
+    vault.sleeve < (vault.netAssets * shares) / (vault.supply || 1n) &&
+    Date.now() - (lastVaultSale.get(ticker) ?? 0) < VAULT_COOLDOWN_MS
+  ) {
+    return NextResponse.json(
+      { error: "this vault is already settling a sale, try again shortly" },
+      { status: 429 },
+    );
+  }
+
   inFlight.add(owner);
   let result;
   try {
@@ -127,6 +152,8 @@ export async function POST(request: Request) {
     inFlight.delete(owner);
     lastPrepared.set(owner, Date.now());
   }
+  // Only a sale that actually traded counts against the vault's cooldown.
+  if (result.sold.length > 0) lastVaultSale.set(ticker, Date.now());
 
   return NextResponse.json({
     ready: result.shortfall === 0n,

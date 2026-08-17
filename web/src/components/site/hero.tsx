@@ -21,19 +21,13 @@ import {
 } from "@/lib/config";
 import {
   computeNav,
-  formatPpm,
   formatNav,
   formatWeight,
   lamportsToSolNumber,
   truncateAddress,
 } from "@/lib/format";
 import { useVault } from "@/lib/vault/hooks";
-import {
-  formatChange,
-  formatUsdCompact,
-  formatUsdPrice,
-  useBasketPrices,
-} from "@/lib/xstocks";
+import { formatChange, formatUsdPrice, useBasketPrices } from "@/lib/xstocks";
 
 const PORTRAITS = TRACKERS.filter((t) => t.portrait).map((t) => ({
   src: t.portrait!,
@@ -123,71 +117,43 @@ function PortraitCycle({
 /** Holdings shown before the list asks to be opened. */
 const VISIBLE_LEGS = 3;
 
-/** First letter only. Whole-string lowercasing would eat "Nov 3, 2025". */
-const uncapitalize = (text: string) =>
-  text.charAt(0).toLowerCase() + text.slice(1);
-
-/** Drop a trailing period so an interpolated value can continue a sentence. */
-const strip = (text: string) => text.replace(/\.\s*$/, "");
-
-/** Guarantee exactly one closing period, never two. */
-const sentence = (text: string) => `${strip(text)}.`;
-
 /**
  * The tracking strip under the card and the portrait. This is the part of a
  * basket that is about time rather than about price: how often we go back to
- * the source, how stale the source itself is, and when the weights move. It
- * sits below both columns because it describes the whole tracker, not the
- * trade, and reading it should not cost anyone a scroll past the numbers.
+ * the source, and when the weights move.
+ *
+ * Four labels and four values, and nothing else. Each cell used to carry a
+ * sentence or two explaining itself, which is the wrong register for a fund
+ * whose whole promise is that you do not have to watch it. Anyone who wants
+ * the long version can follow the source link in the heading.
  */
 function TrackingStrip({ tracker }: { tracker: TrackerConfig }) {
   const frozen = tracker.status === "frozen";
   const { snapshot } = useVault(tracker.ticker);
   const deployed = Boolean(snapshot?.tracker);
 
-  const holdings = `${tracker.ticker} holdings`;
-  // "None. There is no filing." is a real value here, and reading it as a
-  // duration produced "already behind: none. There is no filing..".
-  const sourceLags = !/^none\b/i.test(tracker.filingDelay);
-
   const cells = [
     {
       label: "Source check",
-      value: frozen ? "Stopped" : `Every ${WATCH_SECONDS} seconds`,
-      note: frozen
-        ? "The filer deregistered. There is no next filing to read."
-        : `We re-read the source every ${WATCH_SECONDS} seconds. If it changed, ${holdings} change with it.`,
+      value: frozen ? "Stopped" : `Every ${WATCH_SECONDS}s`,
     },
     {
       label: "Source publishes",
-      value: tracker.rebalance,
-      // One cadence line for every tracker, frozen or not: the cell states
-      // when the source speaks, and the source speaks by disclosing.
-      note: `That is the cadence the filer reports on. ${holdings} do not move in between, and each move is one transaction you can look up.`,
+      // "Quarterly, back to equal weight" — the cadence is the first clause;
+      // what it rebalances to is already on the card as the weights.
+      value: tracker.rebalance.split(",")[0],
     },
     {
-      // Two different delays used to be conflated here. This one is ours: the
-      // gap between the source publishing and the holdings changing, which the
-      // watcher closes. The source's own lag is a fact about the filer, it is
-      // written into the tracker account on chain as filingDelayDays, and it
-      // stays stated rather than rounded away.
+      // Ours, not the filer's: the gap between the source publishing and the
+      // holdings changing, which the watcher closes.
       label: "Our delay",
       value: "None",
-      note: frozen
-        ? `${holdings} match the final filing exactly. That filing is ${sentence(tracker.filingDelay)}`
-        : sourceLags
-          ? `${holdings} match the source as soon as it publishes. The source itself is already behind by ${uncapitalize(strip(tracker.filingDelay))}, and that lag is the filer's rather than ours.`
-          : `${holdings} match the source as soon as it publishes, and there is no filing window to wait out.`,
     },
     {
       label: "In vault",
       value: deployed
         ? `${lamportsToSolNumber(snapshot!.netAssets).toFixed(3)} SOL`
         : "Not deployed",
-      note:
-        deployed && snapshot?.tracker
-          ? `Deposit fee ${formatPpm(snapshot.tracker.depositFeePpm)}. Read from devnet while you look at it.`
-          : "This vault is not live on devnet yet.",
     },
   ];
 
@@ -215,24 +181,17 @@ function TrackingStrip({ tracker }: { tracker: TrackerConfig }) {
           </a>
         </div>
 
-        {/* On a phone these stack into one column, and a label line plus a
-            value line plus a note line each was four tall blocks of nothing.
-            Below sm the label and value share a row, so a cell costs two
-            lines instead of three and the whole strip fits a thumb-scroll. */}
-        <dl className="grid gap-px overflow-hidden rounded-2xl border border-rule bg-rule sm:grid-cols-2 lg:grid-cols-4">
+        {/* Two lines per cell, so all four fit a phone two-up without a
+            scroll and the whole strip reads in about a second. */}
+        <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-rule bg-rule sm:grid-cols-4">
           {cells.map((cell) => (
             <div
               key={cell.label}
-              className="flex flex-col gap-2 bg-bg p-5 sm:gap-2.5"
+              className="flex flex-col gap-2 bg-bg p-4 sm:p-5"
             >
-              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 sm:block">
-                <dt className="meta">{cell.label}</dt>
-                <dd className="text-[0.9375rem] font-semibold leading-snug text-ink sm:mt-2">
-                  {cell.value}
-                </dd>
-              </div>
-              <dd className="text-[0.8125rem] leading-relaxed text-muted">
-                {cell.note}
+              <dt className="meta">{cell.label}</dt>
+              <dd className="text-[0.9375rem] font-semibold leading-snug text-ink">
+                {cell.value}
               </dd>
             </div>
           ))}
@@ -260,12 +219,9 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
   const untradable = tracker.legs.filter((leg) => !leg.tokenized);
 
   // The top three carry most of the weight in every basket here; the tail is
-  // for people who came to read it. Same for the caveat: it stays on the card
-  // rather than behind a link, but it does not get to push the trade below
-  // the fold on first look.
+  // for people who came to read it.
   const [allLegs, setAllLegs] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
-  const [fullCaveat, setFullCaveat] = useState(false);
   const legs = [
     ...(allLegs ? tradable : tradable.slice(0, VISIBLE_LEGS)),
     ...(showMissing ? untradable : []),
@@ -316,175 +272,131 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
 
       <div className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-3">
-      {tradable.length > 0 ? (
-        <div className="glass-inset group/holdings flex flex-col gap-2 p-3 sm:p-3.5">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="flex items-baseline gap-2">
-              <span className="meta">Holdings</span>
-              {/* The names the vault cannot hold are disclosure, not product,
+          {tradable.length > 0 ? (
+            <div className="glass-inset group/holdings flex flex-col gap-2 p-3 sm:p-3.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="flex items-baseline gap-2">
+                  <span className="meta">Holdings</span>
+                  {/* The names the vault cannot hold are disclosure, not product,
                   so they stay out of the way until asked for. On a pointer the
                   toggle only surfaces on hover; touch has no hover, so there
                   it is simply always there. */}
-              {untradable.length > 0 ? (
-                <button
-                  onClick={() => setShowMissing((open) => !open)}
-                  className="num rounded-full border border-rule px-2 py-0.5 text-[0.5625rem] uppercase tracking-wider text-faint transition-all hover:text-ink focus-visible:opacity-100 sm:opacity-0 sm:group-hover/holdings:opacity-100"
-                >
-                  {showMissing
-                    ? "hide"
-                    : `+${untradable.length} not tradable`}
-                </button>
-              ) : null}
-            </span>
-            {prices.tokenizedCount > 0 ? (
-              <span className="num flex items-baseline gap-2 text-[0.625rem] text-faint">
-                {prices.hasAnyPrice ? (
-                  <>
-                    {/* The basket's own 24h move. Renormalized over the legs
+                  {untradable.length > 0 ? (
+                    <button
+                      onClick={() => setShowMissing((open) => !open)}
+                      className="num rounded-full border border-rule px-2 py-0.5 text-[0.5625rem] uppercase tracking-wider text-faint transition-all hover:text-ink focus-visible:opacity-100 sm:opacity-0 sm:group-hover/holdings:opacity-100"
+                    >
+                      {showMissing
+                        ? "hide"
+                        : `+${untradable.length} not tradable`}
+                    </button>
+                  ) : null}
+                </span>
+                {prices.tokenizedCount > 0 ? (
+                  <span className="num flex items-baseline gap-2 text-[0.625rem] text-faint">
+                    {prices.hasAnyPrice ? (
+                      <>
+                        {/* The basket's own 24h move. Renormalized over the legs
                         actually priced, and it says so when that is not all
                         of them rather than quietly averaging toward zero. */}
-                    {prices.change24h !== null ? (
-                      <span
-                        className={
-                          prices.change24h >= 0 ? "text-pos" : "text-neg"
-                        }
-                        title={
-                          prices.coverageBps < 10_000
-                            ? `Covers ${formatWeight(prices.coverageBps)} of the basket`
-                            : "24h move across the whole basket"
-                        }
-                      >
-                        {formatChange(prices.change24h)} 24h
-                        {prices.coverageBps < 10_000 ? "*" : ""}
-                      </span>
-                    ) : null}
-                    {/* <span>live from Jupiter</span> */}
-                  </>
-                ) : (
-                  "prices unavailable"
-                )}
-              </span>
-            ) : null}
-          </div>
-          <ul className="flex flex-col">
-            {legs.map((leg) => (
-              <li
-                key={leg.symbol}
-                className={`weightbar flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0 sm:flex-nowrap sm:gap-x-2.5 ${
-                  leg.tokenized ? "" : "opacity-55"
-                }`}
-                style={
-                  {
-                    "--w": `${(leg.weightBps / maxWeight) * 100}%`,
-                  } as React.CSSProperties
-                }
-              >
-                <TokenMark symbol={leg.symbol} asset={xstocks[leg.symbol]} />
-                <span className="num w-12 shrink-0 font-semibold text-ink sm:w-14">
-                  {leg.tokenized ? leg.xstock : leg.symbol}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-faint">
-                  {leg.company}
-                </span>
-                {(() => {
-                  // A revealed hole says why it is a hole, in the column the
-                  // price would have been in.
-                  if (!leg.tokenized)
-                    return (
-                      <span className="num shrink-0 text-[0.6875rem] uppercase tracking-wider text-faint">
-                        no token
-                      </span>
-                    );
-                  const quote = leg.xstock
-                    ? prices.bySymbol.get(leg.xstock)
-                    : undefined;
-                  if (!quote) return null;
-                  return (
-                    // The per-leg 24h move is the first thing to go on a narrow
-                    // screen: price and weight both carry more, and the row's
-                    // fixed columns otherwise floor it wider than the phone.
-                    <span className="flex shrink-0 items-baseline gap-1.5">
-                      <span className="num tabular-nums text-ink">
-                        {formatUsdPrice(quote.usdPrice)}
-                      </span>
-                      {quote.change24h !== null ? (
-                        <span
-                          className={`num hidden w-14 text-right text-[0.6875rem] tabular-nums sm:block ${
-                            quote.change24h >= 0 ? "text-pos" : "text-neg"
-                          }`}
-                        >
-                          {formatChange(quote.change24h)}
-                        </span>
-                      ) : (
-                        <span className="hidden w-14 sm:block" />
-                      )}
+                        {prices.change24h !== null ? (
+                          <span
+                            className={
+                              prices.change24h >= 0 ? "text-pos" : "text-neg"
+                            }
+                            title={
+                              prices.coverageBps < 10_000
+                                ? `Covers ${formatWeight(prices.coverageBps)} of the basket`
+                                : "24h move across the whole basket"
+                            }
+                          >
+                            {formatChange(prices.change24h)} 24h
+                            {prices.coverageBps < 10_000 ? "*" : ""}
+                          </span>
+                        ) : null}
+                        {/* <span>live from Jupiter</span> */}
+                      </>
+                    ) : (
+                      "prices unavailable"
+                    )}
+                  </span>
+                ) : null}
+              </div>
+              <ul className="flex flex-col">
+                {legs.map((leg) => (
+                  <li
+                    key={leg.symbol}
+                    className={`weightbar flex flex-wrap items-center gap-x-2 gap-y-0.5 border-t border-rule py-1.5 text-[0.8125rem] first:border-t-0 sm:flex-nowrap sm:gap-x-2.5 ${
+                      leg.tokenized ? "" : "opacity-55"
+                    }`}
+                    style={
+                      {
+                        "--w": `${(leg.weightBps / maxWeight) * 100}%`,
+                      } as React.CSSProperties
+                    }
+                  >
+                    <TokenMark
+                      symbol={leg.symbol}
+                      asset={xstocks[leg.symbol]}
+                    />
+                    <span className="num w-12 shrink-0 font-semibold text-ink sm:w-14">
+                      {leg.tokenized ? leg.xstock : leg.symbol}
                     </span>
-                  );
-                })()}
-                <span className="num w-12 shrink-0 text-right tabular-nums text-muted sm:w-14">
-                  {formatWeight(leg.weightBps)}
-                </span>
-              </li>
-            ))}
-          </ul>
+                    <span className="min-w-0 flex-1 truncate text-faint">
+                      {leg.company}
+                    </span>
+                    {(() => {
+                      // A revealed hole says why it is a hole, in the column the
+                      // price would have been in.
+                      if (!leg.tokenized)
+                        return (
+                          <span className="num shrink-0 text-[0.6875rem] uppercase tracking-wider text-faint">
+                            no token
+                          </span>
+                        );
+                      const quote = leg.xstock
+                        ? prices.bySymbol.get(leg.xstock)
+                        : undefined;
+                      if (!quote) return null;
+                      return (
+                        // The per-leg 24h move is the first thing to go on a narrow
+                        // screen: price and weight both carry more, and the row's
+                        // fixed columns otherwise floor it wider than the phone.
+                        <span className="flex shrink-0 items-baseline gap-1.5">
+                          <span className="num tabular-nums text-ink">
+                            {formatUsdPrice(quote.usdPrice)}
+                          </span>
+                          {quote.change24h !== null ? (
+                            <span
+                              className={`num hidden w-14 text-right text-[0.6875rem] tabular-nums sm:block ${
+                                quote.change24h >= 0 ? "text-pos" : "text-neg"
+                              }`}
+                            >
+                              {formatChange(quote.change24h)}
+                            </span>
+                          ) : (
+                            <span className="hidden w-14 sm:block" />
+                          )}
+                        </span>
+                      );
+                    })()}
+                    <span className="num w-12 shrink-0 text-right tabular-nums text-muted sm:w-14">
+                      {formatWeight(leg.weightBps)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
 
-          {tradable.length > VISIBLE_LEGS ? (
-            <button
-              onClick={() => setAllLegs((open) => !open)}
-              className="num self-start pt-1.5 text-[0.6875rem] uppercase tracking-wider text-faint transition-colors hover:text-ink"
-            >
-              {allLegs ? "Show less" : `Show all ${tradable.length}`}
-            </button>
-          ) : null}
-
-          {/* Pool depth, stated rather than buried. Prices come from Solana
-              AMMs, and a leg whose pool is a few tens of thousands of dollars
-              cannot absorb a real rebalance without moving against itself.
-              That is a limit on the product, so it belongs on the card. */}
-          {prices.thin.length > 0 ? (
-            <p className="border-t border-rule pt-2 text-[0.6875rem] leading-relaxed text-faint">
-              Thin on-chain liquidity:{" "}
-              {prices.thin
-                .map(
-                  (p) =>
-                    `${p.symbol} ${formatUsdCompact(p.liquidity as number)}`,
-                )
-                .join(", ")}
-              . Prices are live, but a large rebalance through those pools would
-              move them.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
-          {/* Collapsed, the toggle rides the end of the same line the text is
-              clipped on, so one line costs one line. Open, it follows the last
-              word inline rather than claiming a row of its own. */}
-          {fullCaveat ? (
-            <p className="text-[0.8125rem] leading-relaxed text-muted">
-              <span className="meta mr-2">Straight up</span>
-              {tracker.caveat}{" "}
-              <button
-                onClick={() => setFullCaveat(false)}
-                className="num whitespace-nowrap text-[0.6875rem] uppercase tracking-wider text-faint transition-colors hover:text-ink"
-              >
-                Show less
-              </button>
-            </p>
-          ) : (
-            <div className="flex items-end gap-2 text-[0.8125rem] leading-relaxed text-muted">
-              <p className="line-clamp-2 min-w-0 flex-1">
-                <span className="meta mr-2">Straight up</span>
-                {tracker.caveat}
-              </p>
-              <button
-                onClick={() => setFullCaveat(true)}
-                className="num shrink-0 whitespace-nowrap text-[0.6875rem] uppercase tracking-wider text-faint transition-colors hover:text-ink"
-              >
-                Show more
-              </button>
+              {tradable.length > VISIBLE_LEGS ? (
+                <button
+                  onClick={() => setAllLegs((open) => !open)}
+                  className="num self-start pt-1.5 text-[0.6875rem] uppercase tracking-wider text-faint transition-colors hover:text-ink"
+                >
+                  {allLegs ? "Show less" : `Show all ${tradable.length}`}
+                </button>
+              ) : null}
             </div>
-          )}
+          ) : null}
         </div>
 
         <div className="flex flex-col gap-3">

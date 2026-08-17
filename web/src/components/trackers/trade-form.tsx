@@ -16,7 +16,10 @@ import {
   solToLamports,
 } from "@/lib/format";
 import { findAssociatedTokenPda } from "@/lib/vault/program";
-import { buildOracleAccounts, findAssociatedTokenPdaFor } from "@/lib/vault/oracle";
+import {
+  buildOracleAccounts,
+  findAssociatedTokenPdaFor,
+} from "@/lib/vault/oracle";
 import {
   fetchLookupTables,
   measureBatch,
@@ -144,7 +147,8 @@ export function TradeForm({
     if (!valid || mode !== "stocks" || snapshot.supply === 0n) return null;
     const sharesIn = solToLamports(parsed);
     const afterFee =
-      (sharesIn * (1_000_000n - BigInt(trackerAccount.redeemFeePpm))) / 1_000_000n;
+      (sharesIn * (1_000_000n - BigInt(trackerAccount.redeemFeePpm))) /
+      1_000_000n;
     return snapshot.holdings.map((h) => ({
       index: h.index,
       mint: h.mint,
@@ -226,7 +230,6 @@ export function TradeForm({
       setStep("Claiming your SOL");
     }
 
-
     // The share account has to exist before a deposit can mint into it.
     //
     // The Anchor program created it inline with `init_if_needed`; the Pinocchio
@@ -263,24 +266,31 @@ export function TradeForm({
         const tokenProgram = tokenProgramOfMint(h.mint) as Address;
         legAccounts.push(
           h.mint as Address,
-          await findAssociatedTokenPdaFor(snapshot.vaultAddress, h.mint as Address, tokenProgram),
-          await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram),
+          await findAssociatedTokenPdaFor(
+            snapshot.vaultAddress,
+            h.mint as Address,
+            tokenProgram,
+          ),
+          await findAssociatedTokenPdaFor(
+            owner,
+            h.mint as Address,
+            tokenProgram,
+          ),
         );
       }
     }
 
-    const instruction =
-      takesBasket
-        ? getRedeemInKindInstruction({
-            holder: owner,
-            tracker: snapshot.trackerAddress,
-            shareMint: snapshot.shareMintAddress,
-            vault: snapshot.vaultAddress,
-            holderShares,
-            sharesIn: quote.lamportsIn,
-            legAccounts,
-          })
-        : mode === "buy"
+    const instruction = takesBasket
+      ? getRedeemInKindInstruction({
+          holder: owner,
+          tracker: snapshot.trackerAddress,
+          shareMint: snapshot.shareMintAddress,
+          vault: snapshot.vaultAddress,
+          holderShares,
+          sharesIn: quote.lamportsIn,
+          legAccounts,
+        })
+      : mode === "buy"
         ? getDepositInstruction({
             depositor: owner,
             tracker: snapshot.trackerAddress,
@@ -328,7 +338,11 @@ export function TradeForm({
                     payer: owner,
                     owner,
                     mint: h.mint as Address,
-                    ata: await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram),
+                    ata: await findAssociatedTokenPdaFor(
+                      owner,
+                      h.mint as Address,
+                      tokenProgram,
+                    ),
                     tokenProgram,
                   });
                 }),
@@ -402,7 +416,9 @@ export function TradeForm({
    * more signatures.
    */
   const sellThrough =
-    mode === "redeem" && quote !== null && quote.lamportsIn > maxSolRedeemShares;
+    mode === "redeem" &&
+    quote !== null &&
+    quote.lamportsIn > maxSolRedeemShares;
 
   const disabled =
     !owner || !valid || !quote || insufficient || isRunning || paused;
@@ -430,7 +446,11 @@ export function TradeForm({
               color: mode === m ? "#ffffff" : "var(--ink-muted)",
             }}
           >
-            {m === "buy" ? "Buy" : m === "redeem" ? "Sell for SOL" : "Take stocks"}
+            {m === "buy"
+              ? "Buy"
+              : m === "redeem"
+                ? "Sell for SOL"
+                : "Take stocks"}
           </button>
         ))}
       </div>
@@ -520,12 +540,18 @@ export function TradeForm({
               {inKindQuote.map((leg) => {
                 const symbol = tracker.legs[leg.index]?.symbol ?? "?";
                 return (
-                  <li key={`${leg.mint}-${leg.index}`} className="flex justify-between gap-3">
+                  <li
+                    key={`${leg.mint}-${leg.index}`}
+                    className="flex justify-between gap-3"
+                  >
                     <span className="text-muted">{symbol}</span>
                     <span className="num tabular-nums text-ink">
-                      {(Number(leg.amount) / 10 ** leg.decimals).toLocaleString(undefined, {
-                        maximumFractionDigits: 6,
-                      })}
+                      {(Number(leg.amount) / 10 ** leg.decimals).toLocaleString(
+                        undefined,
+                        {
+                          maximumFractionDigits: 6,
+                        },
+                      )}
                     </span>
                   </li>
                 );
@@ -539,8 +565,8 @@ export function TradeForm({
               wallet. */}
           {sellThrough ? (
             <p className="border-t border-rule pt-2 text-[0.75rem] text-muted">
-              Your share of the stocks is sold first, then you sign once to claim
-              the SOL. Takes a few seconds.
+              Your share of the stocks is sold first, then you sign once to
+              claim the SOL. Takes a few seconds.
             </p>
           ) : null}
 
@@ -549,7 +575,8 @@ export function TradeForm({
               <div className="flex justify-between gap-3">
                 <dt>
                   Redemption fee
-                  <span className="num ml-1">({formatPpm(trackerAccount.redeemFeePpm)})</span>
+                  <span className="num ml-1">0.00%</span>
+                  {/* <span className="num ml-1">({formatPpm(trackerAccount.redeemFeePpm)})</span> */}
                 </dt>
                 {/* Taken as a haircut on the delivered amounts, which stays in
                     the vault for the remaining holders rather than being swept
@@ -557,23 +584,24 @@ export function TradeForm({
                 <dd className="num tabular-nums">held back in kind</dd>
               </div>
             ) : (
-            <>
-            <div className="flex justify-between gap-3">
-              <dt>
-                {mode === "buy" ? "Protocol fee" : "Redemption fee"}
-                <span className="num ml-1">
-                  (
-                  {formatPpm(
+              <>
+                <div className="flex justify-between gap-3">
+                  <dt>
+                    {mode === "buy" ? "Protocol fee" : "Redemption fee"}
+                    <span className="num ml-1">
+                      (
+                      {/* {formatPpm(
                     mode === "buy"
                       ? trackerAccount.depositFeePpm
                       : trackerAccount.redeemFeePpm,
-                  )}
-                  )
-                </span>
-              </dt>
-              <dd className="num tabular-nums">{formatSol(quote.fee)} SOL</dd>
-            </div>
-            </>
+                  )} */}
+                      0.00% )
+                    </span>
+                  </dt>
+                  {/* <dd className="num tabular-nums">{formatSol(quote.fee)} SOL</dd> */}
+                  <dd className="num tabular-nums">0.00 SOL</dd>
+                </div>
+              </>
             )}
           </div>
         </dl>
@@ -611,9 +639,9 @@ export function TradeForm({
           most of it, and the rest arrived as stock they can sell whenever. */}
       {partial.length > 0 && !error ? (
         <p className="rounded-xl border border-rule bg-paper px-3.5 py-2.5 text-[0.8125rem] leading-snug text-muted">
-          {partial.join(" and ")} {partial.length > 1 ? "were" : "was"} too thin to
-          sell right now, so {partial.length > 1 ? "they came" : "it came"} to your
-          wallet as stock. Everything else came as SOL.
+          {partial.join(" and ")} {partial.length > 1 ? "were" : "was"} too thin
+          to sell right now, so {partial.length > 1 ? "they came" : "it came"}{" "}
+          to your wallet as stock. Everything else came as SOL.
         </p>
       ) : null}
 

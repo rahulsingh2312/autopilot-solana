@@ -23,6 +23,18 @@
  * That is deliberate. `prepare-redeem` spends the vault's money on request and
  * therefore has to check who is asking; this one cannot be made to spend
  * anything that was not already going to be spent.
+ *
+ * # It is still rate-limited, and the reason is not this endpoint
+ *
+ * Investing and selling are individually harmless and jointly a loop. A holder
+ * can raise cash through `prepare-redeem` and never claim it; anyone can then
+ * call this to put it back; and the first step can be repeated. Each lap pays
+ * a spread in both directions, and the cost falls on every holder in the vault
+ * rather than on whoever set it going.
+ *
+ * A cooldown per tracker breaks the loop cheaply. It costs nothing real —
+ * idle cash sitting for a few minutes changes nobody's share of anything —
+ * while capping the churn a determined caller can force to a rounding error.
  */
 
 import { NextResponse } from "next/server";
@@ -38,6 +50,10 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+/** Per tracker, not per caller: the loop is about the vault, not the wallet. */
+const COOLDOWN_MS = 5 * 60_000;
+const lastSettled = new Map<string, number>();
+
 export async function POST(request: Request) {
   let body: { ticker?: unknown };
   try {
@@ -51,6 +67,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "unknown tracker" }, { status: 400 });
   }
 
+  const since = Date.now() - (lastSettled.get(ticker) ?? 0);
+  if (since < COOLDOWN_MS) {
+    return NextResponse.json(
+      { invested: "0", bought: [], skipped: "cooling down" },
+      { status: 200 },
+    );
+  }
+
   const rpc = serverRpc();
   const vault = await readVault(rpc, ticker);
   if (!vault) {
@@ -62,6 +86,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "server key is not the manager" }, { status: 500 });
   }
 
+  lastSettled.set(ticker, Date.now());
   const result = await investIdleSol(rpc, signer, vault);
 
   return NextResponse.json({
