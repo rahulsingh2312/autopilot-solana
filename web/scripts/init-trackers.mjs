@@ -55,6 +55,7 @@ import {
 } from "@solana/kit";
 
 import { TRACKERS as CONFIG_TRACKERS } from "../src/lib/config.ts";
+import { legBinding } from "../src/lib/leg-bindings.ts";
 
 const CLUSTER = process.env.CLUSTER ?? "devnet";
 const RPC_URL =
@@ -72,6 +73,7 @@ const ZERO_ADDRESS = "11111111111111111111111111111111";
 const IX_INITIALIZE_TRACKER = 0;
 const IX_REBALANCE = 4;
 const IX_CLOSE_TRACKER = 13;
+const IX_SET_LEG_FEED = 14;
 const STRATEGY_SPOT_BASKET = 0;
 
 /** Offsets into a `Tracker`, mirroring `state::tracker`. */
@@ -79,7 +81,9 @@ const T_LEG_COUNT = 8;
 const T_SHARE_MINT = 86;
 const T_LEGS = 170;
 const LEG_SIZE = 66;
+const LEG_MINT = 0;
 const LEG_WEIGHT_BPS = 32;
+const LEG_FEED_ID = 34;
 
 /**
  * Sized for the protocol ceiling rather than the current basket.
@@ -115,16 +119,44 @@ const MAX_LEGS_PER_TX = MAX_LEGS;
 const DEPOSIT_FEE_PPM = 2500;
 const REDEEM_FEE_PPM = 2500;
 
+const IS_MAINNET = CLUSTER === "mainnet-beta";
+
 /**
- * Legs carry the zero mint on devnet: no tokenized equity exists here, so the
- * program routes that weight to the SOL sleeve and the UI says so. Binding real
- * xStocks mints — and their Pyth feed ids — is a mainnet-only change, and
- * `validate_legs` enforces that a tokenized leg must carry a feed id.
+ * `DRY_RUN=1` simulates every transaction instead of sending it.
+ *
+ * A simulated run still exercises the whole program — the payload encoding, the
+ * PDA derivations, `validate_legs`, the fee ceiling — and reports the compute
+ * used, but writes nothing. Run it once before any mainnet run; the failure it
+ * catches costs nothing here and is unrecoverable on chain.
+ */
+const DRY_RUN = process.env.DRY_RUN === "1";
+
+/**
+ * Legs carry the zero mint on devnet: no tokenized equity exists there, so the
+ * program routes that weight to the SOL sleeve and the UI says so.
+ *
+ * On mainnet each leg is bound to the real xStocks mint and its Pyth feed, read
+ * from the checked-in `leg-bindings.ts` rather than from a live search — see
+ * that file for why. `legBinding` throws on an unknown symbol, so a leg the
+ * repo has no verified binding for stops the run instead of quietly becoming a
+ * zero mint and folding its weight into the SOL sleeve.
+ *
+ * The feed does not travel in this payload. `write_legs` writes a zero feed id
+ * for a mint it has not seen before, and valuation fails closed on a zero feed,
+ * so every leg needs a following `set_leg_feed` — bundled into the same
+ * transaction below, which is what keeps a tracker from ever being visible in a
+ * state where its oracles are unset.
  */
 const TRACKERS = CONFIG_TRACKERS.map((t) => ({
   ticker: t.ticker,
   shareMint: t.shareMint,
-  legs: t.legs.map((l) => l.weightBps),
+  legs: t.legs.map((l) => {
+    if (!IS_MAINNET || !l.tokenized || !l.xstock) {
+      return { symbol: l.symbol, mint: ZERO_ADDRESS, weightBps: l.weightBps, feed: null };
+    }
+    const b = legBinding(l.xstock);
+    return { symbol: l.xstock, mint: b.mint, weightBps: l.weightBps, feed: b.pythFeed };
+  }),
 }));
 
 /**
@@ -150,7 +182,7 @@ async function loadMintSigner(ticker, expected) {
 }
 
 for (const t of TRACKERS) {
-  const sum = t.legs.reduce((a, b) => a + b, 0);
+  const sum = t.legs.reduce((a, l) => a + l.weightBps, 0);
   if (sum !== 10_000) {
     throw new Error(`${t.ticker}: weights sum to ${sum}, not 10000`);
   }
@@ -199,8 +231,6 @@ function encodeInitializeData(tracker) {
   const paddedTicker = new Uint8Array(12);
   paddedTicker.set(tickerBytes);
 
-  const zeroMint = new Uint8Array(addrEnc.encode(ZERO_ADDRESS));
-
   return concat([
     new Uint8Array([
       IX_INITIALIZE_TRACKER,
@@ -212,20 +242,47 @@ function encodeInitializeData(tracker) {
     new Uint8Array([tickerBytes.length]),
     paddedTicker,
     new Uint8Array([tracker.legs.length]),
-    ...tracker.legs.flatMap((weightBps) => [zeroMint, u16le(weightBps)]),
+    ...tracker.legs.flatMap((l) => [
+      new Uint8Array(addrEnc.encode(l.mint)),
+      u16le(l.weightBps),
+    ]),
   ]);
 }
 
-/** The basket as it currently stands on chain, as weights in order. */
-function readOnChainWeights(base64) {
+/** `leg_index: u8 || feed_id: [u8; 32]` — see `handle_set_leg_feed`. */
+function encodeSetLegFeed(index, feedHex) {
+  const hex = feedHex.startsWith("0x") ? feedHex.slice(2) : feedHex;
+  if (hex.length !== 64) {
+    throw new Error(`feed id must be 32 bytes, got ${hex.length / 2}`);
+  }
+  const feed = Uint8Array.from(hex.match(/../g).map((b) => parseInt(b, 16)));
+  return concat([new Uint8Array([IX_SET_LEG_FEED, index]), feed]);
+}
+
+/**
+ * The basket as it currently stands on chain: mint, weight and feed per leg.
+ *
+ * Drift is checked on all three. Weight-only comparison was enough while every
+ * leg carried the zero mint, but once legs are bound to real equities a wrong
+ * mint or an unset feed is the failure that matters — and neither shows up in
+ * the weights.
+ */
+function readOnChainLegs(base64) {
   const d = Buffer.from(base64, "base64");
   const count = d[T_LEG_COUNT];
   const out = [];
   for (let i = 0; i < count; i++) {
-    out.push(d.readUInt16LE(T_LEGS + i * LEG_SIZE + LEG_WEIGHT_BPS));
+    const off = T_LEGS + i * LEG_SIZE;
+    out.push({
+      mint: bs58(d.subarray(off + LEG_MINT, off + LEG_MINT + 32)),
+      weightBps: d.readUInt16LE(off + LEG_WEIGHT_BPS),
+      feed: d.subarray(off + LEG_FEED_ID, off + LEG_FEED_ID + 32).toString("hex"),
+    });
   }
   return out;
 }
+
+const ZERO_FEED = "0".repeat(64);
 
 /** The mint this tracker was created with, as base58. */
 function readOnChainMint(base64) {
@@ -250,11 +307,37 @@ function bs58(bytes) {
 }
 
 function encodeRebalanceData(legs) {
-  const zeroMint = new Uint8Array(addrEnc.encode(ZERO_ADDRESS));
   return concat([
     new Uint8Array([IX_REBALANCE, legs.length]),
-    ...legs.flatMap((weightBps) => [zeroMint, u16le(weightBps)]),
+    ...legs.flatMap((l) => [
+      new Uint8Array(addrEnc.encode(l.mint)),
+      u16le(l.weightBps),
+    ]),
   ]);
+}
+
+/**
+ * One `set_leg_feed` per tokenized leg.
+ *
+ * Sent alongside the instruction that wrote the basket rather than after it.
+ * `write_legs` carries a feed forward only for a mint already in the basket, so
+ * a newly bound leg lands with a zero feed id — and valuation fails closed on a
+ * zero feed. Bundling them means the tracker is never observable in a state
+ * where a leg has a mint but no oracle.
+ */
+function feedInstructions(signer, trackerPda, legs) {
+  return legs.flatMap((l, i) =>
+    l.feed
+      ? [{
+          programAddress: PROGRAM_ID,
+          accounts: [
+            { address: signer.address, role: AccountRole.READONLY_SIGNER },
+            { address: trackerPda, role: AccountRole.WRITABLE },
+          ],
+          data: encodeSetLegFeed(i, l.feed),
+        }]
+      : [],
+  );
 }
 
 const pda = async (seeds) =>
@@ -283,8 +366,8 @@ async function rpcRetry(fn, attempts = 8) {
   }
 }
 
-/** Build, sign, send and confirm a single-instruction transaction. */
-async function sendIx(signer, rpc, instruction, confirm, extraSigners = []) {
+/** Build, sign, send and confirm one transaction carrying `instructions`. */
+async function sendIx(signer, rpc, instructions, confirm, extraSigners = []) {
   const { value: blockhash } = await rpcRetry(() =>
     rpc.getLatestBlockhash().send(),
   );
@@ -292,11 +375,34 @@ async function sendIx(signer, rpc, instruction, confirm, extraSigners = []) {
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayerSigner(signer, m),
     (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
-    (m) => appendTransactionMessageInstructions([instruction], m),
+    (m) => appendTransactionMessageInstructions([].concat(instructions), m),
     (m) => addSignersToTransactionMessage([signer, ...extraSigners], m),
   );
   const signed = await signTransactionMessageWithSigners(message);
   const sig = getSignatureFromTransaction(signed);
+
+  if (DRY_RUN) {
+    const { value } = await rpcRetry(() =>
+      rpc
+        .simulateTransaction(getBase64EncodedWireTransaction(signed), {
+          encoding: "base64",
+          commitment: "confirmed",
+          // The transaction is fully signed, so its blockhash is real and the
+          // signatures verify — no need to ask the validator to skip either.
+          replaceRecentBlockhash: false,
+          sigVerify: true,
+        })
+        .send(),
+    );
+    if (value.err) {
+      throw new Error(
+        `simulation failed: ${JSON.stringify(value.err)}\n${(value.logs ?? []).join("\n")}`,
+      );
+    }
+    console.log(`  simulated ok, ${value.unitsConsumed} CU`);
+    return "(dry run)";
+  }
+
   await rpcRetry(() =>
     rpc
       .sendTransaction(getBase64EncodedWireTransaction(signed), {
@@ -406,7 +512,7 @@ async function main() {
         await sendIx(
           signer,
           rpc,
-          {
+          [{
             programAddress: PROGRAM_ID,
             accounts: [
               { address: signer.address, role: AccountRole.READONLY_SIGNER },
@@ -417,16 +523,21 @@ async function main() {
               { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
             ],
             data: new Uint8Array([IX_CLOSE_TRACKER]),
-          },
+          }],
           confirm,
         );
         migrated += 1;
         // Fall through to creation below with the vanity mint.
       } else {
-      const onChain = readOnChainWeights(existing.data[0]);
+      const onChain = readOnChainLegs(existing.data[0]);
       const matches =
         onChain.length === tracker.legs.length &&
-        onChain.every((w, i) => w === tracker.legs[i]);
+        onChain.every(
+          (l, i) =>
+            l.weightBps === tracker.legs[i].weightBps &&
+            l.mint === tracker.legs[i].mint &&
+            l.feed === (tracker.legs[i].feed ?? ZERO_FEED),
+        );
       if (matches) {
         console.log(`${tracker.ticker.padEnd(8)} up to date        ${onChain.length} legs`);
         continue;
@@ -438,14 +549,20 @@ async function main() {
       await sendIx(
         signer,
         rpc,
-        {
-          programAddress: PROGRAM_ID,
-          accounts: [
-            { address: signer.address, role: AccountRole.READONLY_SIGNER },
-            { address: trackerPda, role: AccountRole.WRITABLE },
-          ],
-          data: encodeRebalanceData(tracker.legs),
-        },
+        [
+          {
+            programAddress: PROGRAM_ID,
+            accounts: [
+              { address: signer.address, role: AccountRole.READONLY_SIGNER },
+              { address: trackerPda, role: AccountRole.WRITABLE },
+            ],
+            data: encodeRebalanceData(tracker.legs),
+          },
+          // Re-issued unconditionally: `write_legs` only carries a feed forward
+          // for a mint that was already in the basket, so a reweight that also
+          // swaps a mint would otherwise leave that leg unpriceable.
+          ...feedInstructions(signer, trackerPda, tracker.legs),
+        ],
         confirm,
       );
       reconciled += 1;
@@ -453,7 +570,7 @@ async function main() {
       }
     }
 
-    const instruction = {
+    const initialize = {
       programAddress: PROGRAM_ID,
       accounts: [
         { address: signer.address, role: AccountRole.WRITABLE_SIGNER },
@@ -470,10 +587,23 @@ async function main() {
       data: encodeInitializeData(tracker),
     };
 
-    const sig = await sendIx(signer, rpc, instruction, confirm, [mintSigner]);
+    const sig = await sendIx(
+      signer,
+      rpc,
+      [initialize, ...feedInstructions(signer, trackerPda, tracker.legs)],
+      confirm,
+      [mintSigner],
+    );
     created += 1;
 
     console.log(`${tracker.ticker.padEnd(8)} initialized  ${tracker.legs.length} legs`);
+    for (const l of tracker.legs) {
+      console.log(
+        `  leg     ${l.symbol.padEnd(7)} ${(l.weightBps / 100).toFixed(2).padStart(5)}%  ` +
+          `${l.mint === ZERO_ADDRESS ? "SOL sleeve" : l.mint}` +
+          `${l.feed ? `  feed ${l.feed.slice(0, 8)}…` : ""}`,
+      );
+    }
     console.log(`  tracker ${trackerPda}`);
     console.log(`  vault   ${vaultPda}`);
     console.log(`  mint    ${mintPda}`);
