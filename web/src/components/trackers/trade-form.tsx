@@ -16,13 +16,14 @@ import {
   solToLamports,
 } from "@/lib/format";
 import { findAssociatedTokenPda } from "@/lib/vault/program";
-import { buildOracleAccounts } from "@/lib/vault/oracle";
+import { buildOracleAccounts, findAssociatedTokenPdaFor } from "@/lib/vault/oracle";
 import { tokenProgramOfMint } from "@/lib/leg-bindings";
 import {
   explainTransactionError,
   getCreateAssociatedTokenIdempotentInstruction,
   getDepositInstruction,
   getRedeemForSolInstruction,
+  getRedeemInKindInstruction,
 } from "@/lib/vault/instructions";
 import type { VaultSnapshot } from "@/lib/vault/hooks";
 import { useShareBalance, useSolBalance } from "@/lib/vault/hooks";
@@ -39,7 +40,18 @@ const SLIPPAGE_BPS = 50n;
 /** Leave enough SOL behind to pay fees and the share account's rent. */
 const RESERVE_LAMPORTS = 5_000_000n;
 
-type Mode = "buy" | "redeem";
+/**
+ * `stocks` is `redeem_in_kind`: it delivers a pro-rata slice of every leg
+ * rather than SOL.
+ *
+ * It is not an advanced option, it is the exit that always works. Redeeming
+ * for SOL pays out of the sleeve, so a vault that has bought its basket can
+ * only cover a small redemption that way — habitSOL holds 3% in SOL and 97% in
+ * stock, and the program computes the full claim and then fails the reserve
+ * check rather than paying part of it. It is also oracle-free, so it keeps
+ * working when a Pyth feed is stale and valuation reverts.
+ */
+type Mode = "buy" | "redeem" | "stocks";
 
 /**
  * The inline trade surface: glass tabs, glass input, gradient submit. Lives
@@ -67,6 +79,18 @@ export function TradeForm({
 
   const trackerAccount = snapshot.tracker!;
   const nav = computeNav(snapshot.netAssets, snapshot.supply);
+
+  /**
+   * The largest SOL redemption the sleeve can actually settle.
+   *
+   * `redeem_for_sol` checks the holder's *gross* claim against the vault's
+   * lamports, so anything above this computes a correct payout and then
+   * reverts. Showing it lets the form say so before the wallet does.
+   */
+  const maxSolRedeemShares =
+    snapshot.netAssets > 0n && snapshot.supply > 0n
+      ? (snapshot.sleeveLamports * snapshot.supply) / snapshot.netAssets
+      : snapshot.supply;
 
   const parsed = Number(amount);
   const valid = Number.isFinite(parsed) && parsed > 0;
@@ -96,6 +120,26 @@ export function TradeForm({
     const net = gross - fee;
     const minOut = (net * (10_000n - SLIPPAGE_BPS)) / 10_000n;
     return { lamportsIn: sharesIn, fee, net, out: net, minOut };
+  }, [valid, parsed, mode, snapshot, trackerAccount]);
+
+  /**
+   * What an in-kind redemption delivers, per leg.
+   *
+   * `vault_balance × shares ÷ supply`, with the fee taken as a haircut that
+   * stays in the vault. No oracle: this is the same arithmetic the program
+   * does, and it is correct at any price.
+   */
+  const inKindQuote = useMemo(() => {
+    if (!valid || mode !== "stocks" || snapshot.supply === 0n) return null;
+    const sharesIn = solToLamports(parsed);
+    const afterFee =
+      (sharesIn * (1_000_000n - BigInt(trackerAccount.redeemFeePpm))) / 1_000_000n;
+    return snapshot.holdings.map((h) => ({
+      index: h.index,
+      mint: h.mint,
+      decimals: h.decimals,
+      amount: (h.balance * afterFee) / snapshot.supply,
+    }));
   }, [valid, parsed, mode, snapshot, trackerAccount]);
 
   const insufficient =
@@ -145,8 +189,33 @@ export function TradeForm({
       (mint) => tokenProgramOfMint(mint) as Address,
     );
 
+    // In-kind delivery needs, per leg in basket order: the mint, the vault's
+    // token account, and the holder's. No oracle accounts — this path never
+    // consults a price, which is exactly why it still works when one is stale.
+    const legAccounts: Address[] = [];
+    if (mode === "stocks") {
+      for (const h of snapshot.holdings) {
+        const tokenProgram = tokenProgramOfMint(h.mint) as Address;
+        legAccounts.push(
+          h.mint as Address,
+          await findAssociatedTokenPdaFor(snapshot.vaultAddress, h.mint as Address, tokenProgram),
+          await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram),
+        );
+      }
+    }
+
     const instruction =
-      mode === "buy"
+      mode === "stocks"
+        ? getRedeemInKindInstruction({
+            holder: owner,
+            tracker: snapshot.trackerAddress,
+            shareMint: snapshot.shareMintAddress,
+            vault: snapshot.vaultAddress,
+            holderShares,
+            sharesIn: quote.lamportsIn,
+            legAccounts,
+          })
+        : mode === "buy"
         ? getDepositInstruction({
             depositor: owner,
             tracker: snapshot.trackerAddress,
@@ -181,7 +250,27 @@ export function TradeForm({
             }),
             instruction,
           ]
-        : [instruction];
+        : mode === "stocks"
+          ? [
+              // The program creates nothing, so the holder needs a token
+              // account for every leg before it can be paid into. Idempotent,
+              // so a second redemption pays no rent and there is no round trip
+              // to check first.
+              ...(await Promise.all(
+                snapshot.holdings.map(async (h) => {
+                  const tokenProgram = tokenProgramOfMint(h.mint) as Address;
+                  return getCreateAssociatedTokenIdempotentInstruction({
+                    payer: owner,
+                    owner,
+                    mint: h.mint as Address,
+                    ata: await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram),
+                    tokenProgram,
+                  });
+                }),
+              )),
+              instruction,
+            ]
+          : [instruction];
 
     const result = await client.sendTransaction(instructions, {
       abortSignal: signal,
@@ -193,17 +282,26 @@ export function TradeForm({
     return result.context.signature as string;
   });
 
+  /**
+   * A SOL redemption larger than the sleeve is refused here rather than on
+   * chain. The program computes the holder's gross claim, checks it against
+   * the vault's lamports and reverts — so letting the button through would
+   * spend a signature to learn what this already knows.
+   */
+  const exceedsSleeve =
+    mode === "redeem" && quote !== null && quote.lamportsIn > maxSolRedeemShares;
+
   const disabled =
-    !owner || !valid || !quote || insufficient || isRunning || paused;
+    !owner || !valid || !quote || insufficient || isRunning || paused || exceedsSleeve;
 
   return (
     <div className="flex flex-col gap-4">
       <div
         role="tablist"
         aria-label="Trade direction"
-        className="glass-inset grid grid-cols-2 gap-1 p-1"
+        className="glass-inset grid grid-cols-3 gap-1 p-1"
       >
-        {(["buy", "redeem"] as Mode[]).map((m) => (
+        {(["buy", "redeem", "stocks"] as Mode[]).map((m) => (
           <button
             key={m}
             role="tab"
@@ -213,13 +311,13 @@ export function TradeForm({
               setAmount("");
               reset();
             }}
-            className="num rounded-xl px-3 py-2.5 text-xs font-semibold uppercase tracking-wider transition-colors"
+            className="num rounded-xl px-2 py-2.5 text-[0.6875rem] font-semibold uppercase tracking-wider transition-colors sm:px-3 sm:text-xs"
             style={{
               background: mode === m ? "var(--ink)" : "transparent",
               color: mode === m ? "#ffffff" : "var(--ink-muted)",
             }}
           >
-            {m === "buy" ? "Buy with SOL" : "Redeem for SOL"}
+            {m === "buy" ? "Buy" : m === "redeem" ? "Sell for SOL" : "Take stocks"}
           </button>
         ))}
       </div>
@@ -293,13 +391,68 @@ export function TradeForm({
                   {formatShares(quote.out)}{" "}
                   <TokenTicker ticker={tracker.ticker} size={16} />
                 </>
+              ) : mode === "stocks" ? (
+                `${inKindQuote?.length ?? 0} holdings`
               ) : (
                 `${formatSol(quote.out)} SOL`
               )}
             </dd>
           </div>
 
+          {/* In kind, the payout is a list, not a number. Spelling out each
+              leg is the whole point of the option: the holder is choosing to
+              take the assets rather than their value. */}
+          {mode === "stocks" && inKindQuote ? (
+            <ul className="flex flex-col gap-1 border-t border-rule pt-2 text-[0.75rem]">
+              {inKindQuote.map((leg) => {
+                const symbol = tracker.legs[leg.index]?.symbol ?? "?";
+                return (
+                  <li key={`${leg.mint}-${leg.index}`} className="flex justify-between gap-3">
+                    <span className="text-muted">{symbol}</span>
+                    <span className="num tabular-nums text-ink">
+                      {(Number(leg.amount) / 10 ** leg.decimals).toLocaleString(undefined, {
+                        maximumFractionDigits: 6,
+                      })}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+
+          {/* `redeem_for_sol` pays from the sleeve and checks the holder's
+              gross claim against it, so past this point the transaction
+              reverts rather than paying part. Better said here than by a
+              wallet. */}
+          {mode === "redeem" && quote.lamportsIn > maxSolRedeemShares ? (
+            <p className="border-t border-rule pt-2 text-[0.75rem] text-neg">
+              The vault only holds {formatSol(snapshot.sleeveLamports)} SOL — the rest is
+              in stock. Redeem up to {formatShares(maxSolRedeemShares)} for SOL, or use
+              <button
+                type="button"
+                onClick={() => { setMode("stocks"); reset(); }}
+                className="mx-1 underline decoration-dotted underline-offset-2 hover:text-ink"
+              >
+                Take stocks
+              </button>
+              to withdraw the whole position.
+            </p>
+          ) : null}
+
           <div className="flex flex-col gap-1 border-t border-rule pt-2 text-[0.75rem] text-faint">
+            {mode === "stocks" ? (
+              <div className="flex justify-between gap-3">
+                <dt>
+                  Redemption fee
+                  <span className="num ml-1">({formatPpm(trackerAccount.redeemFeePpm)})</span>
+                </dt>
+                {/* Taken as a haircut on the delivered amounts, which stays in
+                    the vault for the remaining holders rather than being swept
+                    out in dust-sized transfers. */}
+                <dd className="num tabular-nums">held back in kind</dd>
+              </div>
+            ) : (
+            <>
             <div className="flex justify-between gap-3">
               <dt>
                 {mode === "buy" ? "Protocol fee" : "Redemption fee"}
@@ -323,6 +476,8 @@ export function TradeForm({
                   : `${formatSol(quote.minOut)} SOL`}
               </dd>
             </div>
+            </>
+            )}
           </div>
         </dl>
       ) : null}
@@ -347,7 +502,11 @@ export function TradeForm({
                   ? "Enter an amount"
                   : mode === "buy"
                     ? `Buy ${tracker.ticker}`
-                    : "Redeem for SOL"}
+                    : mode === "stocks"
+                      ? "Take the stocks"
+                      : exceedsSleeve
+                        ? "More SOL than the vault holds"
+                        : "Redeem for SOL"}
         </button>
       )}
 

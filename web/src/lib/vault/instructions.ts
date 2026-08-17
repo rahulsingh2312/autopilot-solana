@@ -75,6 +75,13 @@ export function getCreateAssociatedTokenIdempotentInstruction(params: {
   owner: Address;
   mint: Address;
   ata: Address;
+  /**
+   * Defaults to classic SPL Token, which is right for the share mint. Every
+   * leg is Token-2022, and the token program is a seed of the address, so a
+   * leg account created under the default lands somewhere the program will
+   * never look.
+   */
+  tokenProgram?: Address;
 }): Instruction {
   return {
     programAddress: ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
@@ -84,7 +91,7 @@ export function getCreateAssociatedTokenIdempotentInstruction(params: {
       { address: params.owner, role: AccountRole.READONLY },
       { address: params.mint, role: AccountRole.READONLY },
       { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
-      { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+      { address: params.tokenProgram ?? TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
     ],
     data: new Uint8Array([1]),
   };
