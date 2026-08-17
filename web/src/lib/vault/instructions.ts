@@ -239,13 +239,65 @@ const PROGRAM_ERRORS: Record<number, string> = {
   6045: "An account this needs to write to was passed as read-only.",
 };
 
+function safeString(value: unknown): string {
+  try {
+    return typeof value === "string" ? value : JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
+}
+
 /**
- * Turns a Kit or wallet error into one sentence a person can act on. Falls
- * back to the raw message rather than swallowing anything.
+ * Everything in an error chain a matcher below could key on.
+ *
+ * A production build hides the reason twice over. `@solana/errors` throws away
+ * its own readable message and leaves `Solana error #11; Decode this error by
+ * running npx @solana/errors decode -- 11 '<base64>'`, and the wallet's actual
+ * words ("User rejected the request") survive only inside that payload or on
+ * `cause`. Matching the top-level message alone therefore classifies nothing,
+ * and a plain rejection reaches the user as a wall of base64.
+ */
+function errorHaystack(error: unknown): string {
+  const parts: string[] = [];
+  let node: unknown = error;
+
+  for (let depth = 0; node != null && depth < 8; depth++) {
+    if (!(node instanceof Error)) {
+      parts.push(safeString(node));
+      break;
+    }
+    parts.push(node.message);
+    // `SolanaError` carries the structured context — program logs, preflight
+    // data, the cause's message — that the message itself dropped.
+    const context = (node as { context?: unknown }).context;
+    if (context && typeof context === "object") parts.push(safeString(context));
+    node = node.cause;
+  }
+
+  // ...and the same context again for the errors that only encoded it.
+  const encoded = parts.join(" ").match(/decode -- \d+ '([A-Za-z0-9+/=]+)'/);
+  if (encoded) {
+    try {
+      const params = new URLSearchParams(atob(encoded[1]));
+      for (const [, value] of params) parts.push(value);
+    } catch {
+      // Not decodable, so there is nothing more to learn from it.
+    }
+  }
+
+  return parts.join(" ");
+}
+
+/**
+ * Turns a Kit or wallet error into one sentence a person can act on.
+ *
+ * Always one sentence. The unclassified fallback used to be the raw message,
+ * which on a rejected signature meant a paragraph of base64 that overflowed
+ * the panel it sat in and told the reader nothing. The raw error goes to the
+ * console instead, where it is useful.
  */
 export function explainTransactionError(error: unknown): string {
-  const raw =
-    error instanceof Error ? error.message : String(error ?? "Unknown error");
+  const raw = errorHaystack(error);
 
   const custom = raw.match(/custom program error: 0x([0-9a-fA-F]+)/);
   if (custom) {
@@ -269,5 +321,12 @@ export function explainTransactionError(error: unknown): string {
   if (/already in use/i.test(raw))
     return "That account already exists on this cluster.";
 
-  return raw;
+  if (typeof console !== "undefined") console.error(error);
+
+  // Nothing matched. Keep the code — it is the one part of the decode advice
+  // worth reading, and it is short.
+  const code = raw.match(/Solana error #(\d+)/);
+  return code
+    ? `That didn't go through (error #${code[1]}). Try again.`
+    : "That didn't go through. Try again.";
 }

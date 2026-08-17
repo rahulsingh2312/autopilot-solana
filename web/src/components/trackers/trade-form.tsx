@@ -76,8 +76,10 @@ export function TradeForm({
   const client = useClient<AppClient>();
   const owner = useWalletAddress();
   const [mode, setMode] = useState<Mode>("buy");
-  /** Progress text while a multi-transaction exit runs. */
+  /** Progress text while a multi-step exit runs. */
   const [step, setStep] = useState<string | null>(null);
+  /** Legs too thin to sell, delivered as stock instead. */
+  const [partial, setPartial] = useState<string[]>([]);
   const [amount, setAmount] = useState("");
 
   const { lamports: solBalance, refresh: refreshSol } = useSolBalance(owner);
@@ -176,6 +178,55 @@ export function TradeForm({
       snapshot.shareMintAddress,
     );
 
+    /**
+     * Set when the pre-sale could not raise the full claim.
+     *
+     * Declared here because it decides which instruction is built, and that
+     * decision is made further down than the sale that sets it.
+     */
+    let soldShort = false;
+
+    if (sellThrough) {
+      setStep("Selling your share");
+      const prepared = await fetch("/api/vault/prepare-redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: tracker.ticker,
+          owner,
+          shares: quote.lamportsIn.toString(),
+        }),
+        signal,
+      }).then((r) => r.json());
+
+      if (prepared.error) throw new Error(prepared.error);
+
+      /**
+       * A leg that will not route does not fail the exit.
+       *
+       * Some positions are too thin to sell at all: every route Jupiter
+       * returns for them is wider than a Solana transaction can hold, at any
+       * size. Refusing the whole redemption over one such leg would strand a
+       * holder in a fund they asked to leave.
+       *
+       * So the sale takes what it can, and the redemption switches to in-kind:
+       * the holder receives the SOL that was raised plus the unsold positions
+       * as stock, in the same single transaction. They are told which, and
+       * they are out either way.
+       */
+      if (!prepared.ready) {
+        soldShort = true;
+        setPartial(prepared.unsold ?? []);
+      }
+
+      // Nothing needs rebuilding. The instruction carries the share count and
+      // the program recomputes the payout from the vault as it stands, so the
+      // sale that just happened is already reflected. `minLamportsOut` still
+      // guards the holder against the sleeve being drained in between.
+      setStep("Claiming your SOL");
+    }
+
+
     // The share account has to exist before a deposit can mint into it.
     //
     // The Anchor program created it inline with `init_if_needed`; the Pinocchio
@@ -201,9 +252,10 @@ export function TradeForm({
     // In-kind delivery needs, per leg in basket order: the mint, the vault's
     // token account, and the holder's. No oracle accounts — this path never
     // consults a price, which is exactly why it still works when one is stale.
-    // Only the stocks tab takes delivery. Selling for SOL now settles out of
-    // the sleeve, because the server has already refilled it.
-    const takesBasket = mode === "stocks";
+    // The stocks tab always takes delivery. Selling for SOL normally settles
+    // out of the refilled sleeve — unless a leg could not be sold, in which
+    // case in-kind is what delivers both the SOL raised and the stub position.
+    const takesBasket = mode === "stocks" || soldShort;
 
     const legAccounts: Address[] = [];
     if (takesBasket) {
@@ -306,32 +358,6 @@ export function TradeForm({
      * settled out of the sleeve — one transaction, no Jupiter, nothing for the
      * holder to sign twice.
      */
-    if (sellThrough) {
-      setStep("Selling your share");
-      const prepared = await fetch("/api/vault/prepare-redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ticker: tracker.ticker,
-          owner,
-          shares: quote.lamportsIn.toString(),
-        }),
-        signal,
-      }).then((r) => r.json());
-
-      if (prepared.error) throw new Error(prepared.error);
-      if (!prepared.ready) {
-        throw new Error(
-          "One of the holdings could not be sold right now. You can still take the basket as stock.",
-        );
-      }
-
-      // Nothing needs rebuilding. The instruction carries the share count and
-      // the program recomputes the payout from the vault as it stands, so the
-      // sale that just happened is already reflected. `minLamportsOut` still
-      // guards the holder against the sleeve being drained in between.
-      setStep("Claiming your SOL");
-    }
 
     const result = await client.sendTransaction(instructions, {
       abortSignal: signal,
@@ -559,10 +585,20 @@ export function TradeForm({
         </button>
       )}
 
+      {/* Said after the fact, not before: the holder asked for SOL and got
+          most of it, and the rest arrived as stock they can sell whenever. */}
+      {partial.length > 0 && !error ? (
+        <p className="rounded-xl border border-rule bg-paper px-3.5 py-2.5 text-[0.8125rem] leading-snug text-muted">
+          {partial.join(" and ")} {partial.length > 1 ? "were" : "was"} too thin to
+          sell right now, so {partial.length > 1 ? "they came" : "it came"} to your
+          wallet as stock. Everything else came as SOL.
+        </p>
+      ) : null}
+
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-neg/50 bg-neg/10 px-3.5 py-2.5 text-[0.8125rem] leading-snug text-neg"
+          className="break-words rounded-xl border border-neg/50 bg-neg/10 px-3.5 py-2.5 text-[0.8125rem] leading-snug text-neg"
         >
           {explainTransactionError(error)}
         </p>

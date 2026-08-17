@@ -96,5 +96,7 @@ export async function POST(request: Request) {
     // A leg that would not route leaves the sleeve short. The holder can still
     // take the basket in kind, which needs no route and no oracle.
     shortfall: result.shortfall.toString(),
+    // Named so the client can tell the holder which positions arrive as stock.
+    unsold: result.unsold,
   });
 }

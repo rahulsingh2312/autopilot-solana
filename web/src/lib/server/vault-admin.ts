@@ -207,10 +207,24 @@ async function planRoute(
   outputMint: Address,
   amountIn: bigint,
 ): Promise<RoutePlan | null> {
+  /**
+   * Ordered cheapest-to-send first, ending unconstrained.
+   *
+   * The last entry is not a formality. A thin pair at small size often has no
+   * direct route and no route inside a `maxAccounts` hint either, yet routes
+   * perfectly well when the router is left alone — PEPx and XOMx at half a
+   * cent's worth returned "No routes found" for every constrained attempt and
+   * a two-hop Raydium route when asked without one. Stopping at the hints made
+   * those legs unsellable and a redemption unsettleable.
+   *
+   * The account count is still checked afterwards, so an unconstrained route
+   * that is too wide is rejected rather than sent.
+   */
   const attempts = [
     { onlyDirectRoutes: true, shared: false },
     { maxAccounts: 20, shared: true },
     { maxAccounts: 28, shared: true },
+    { shared: true },
   ];
 
   for (const a of attempts) {
@@ -220,8 +234,8 @@ async function planRoute(
       amount: String(amountIn),
       slippageBps: "300",
     });
-    if (a.maxAccounts) params.set("maxAccounts", String(a.maxAccounts));
-    if (a.onlyDirectRoutes) params.set("onlyDirectRoutes", "true");
+    if ("maxAccounts" in a && a.maxAccounts) params.set("maxAccounts", String(a.maxAccounts));
+    if ("onlyDirectRoutes" in a && a.onlyDirectRoutes) params.set("onlyDirectRoutes", "true");
 
     const quote = await fetch(`${JUP_API}/quote?${params}`).then((r) => r.json());
     if (!quote?.outAmount) continue;
@@ -391,14 +405,15 @@ export async function raiseForRedemption(
   signer: Awaited<ReturnType<typeof managerSigner>>,
   v: VaultView,
   shares: bigint,
-): Promise<{ raised: bigint; sold: string[]; shortfall: bigint }> {
-  if (v.supply === 0n) return { raised: v.sleeve, sold: [], shortfall: 0n };
+): Promise<{ raised: bigint; sold: string[]; shortfall: bigint; unsold: string[] }> {
+  if (v.supply === 0n) return { raised: v.sleeve, sold: [], shortfall: 0n, unsold: [] };
 
   const claim = (v.netAssets * shares) / v.supply;
   const target = claim + (claim * OVERSELL_BPS) / 10_000n;
   const sold: string[] = [];
 
-  if (v.sleeve >= target) return { raised: v.sleeve, sold, shortfall: 0n };
+  const unsold: string[] = [];
+  if (v.sleeve >= target) return { raised: v.sleeve, sold, shortfall: 0n, unsold };
 
   let need = target - v.sleeve;
   const legs = [...v.legs].filter((l) => l.amount > 0n).sort((a, b) => (b.lamports > a.lamports ? 1 : -1));
@@ -411,12 +426,12 @@ export async function raiseForRedemption(
     const amount = BigInt(Math.ceil(Number(leg.amount) * Math.min(fraction, 1)));
 
     const sig = await sellLegForSol(rpc, signer, v, leg, amount > leg.amount ? leg.amount : amount);
-    if (!sig) continue;
+    if (!sig) { unsold.push(leg.symbol); continue; }
     sold.push(sig);
     need -= wanted;
   }
 
   const { value: after } = await rpc.getBalance(v.vault, { commitment: "confirmed" }).send();
   const raised = BigInt(after);
-  return { raised, sold, shortfall: need > 0n ? need : 0n };
+  return { raised, sold, shortfall: need > 0n ? need : 0n, unsold };
 }

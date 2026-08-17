@@ -162,10 +162,14 @@ export async function readVault(rpc, ticker) {
  * the vault does not have, which Jupiter reports as 0x1789.
  */
 export async function planRoute({ vault, inputMint, outputMint, amountIn, slippageBps = 300 }) {
+  // Ends unconstrained on purpose: a thin pair at small size frequently has no
+  // direct route and none inside a `maxAccounts` hint, yet routes fine when the
+  // router is left alone. The account count is checked afterwards regardless.
   const attempts = [
     { onlyDirectRoutes: true, useSharedAccounts: false },
     { maxAccounts: 20, useSharedAccounts: true },
     { maxAccounts: 28, useSharedAccounts: true },
+    { useSharedAccounts: true },
   ];
 
   for (const attempt of attempts) {
