@@ -7,6 +7,15 @@ export const CLUSTER = (process.env.NEXT_PUBLIC_SOLANA_CLUSTER ?? "devnet") as
   | "devnet"
   | "mainnet-beta";
 
+/**
+ * Where the browser sends RPC.
+ *
+ * `NEXT_PUBLIC_` means this is compiled into the client bundle and readable by
+ * anyone who opens devtools, so a keyed endpoint here is a public endpoint.
+ * That is a deliberate choice — the quota is the exposure, and the owner would
+ * rather pay for a shared key than run a proxy hop. Rotate it if it gets
+ * scraped; nothing signs with it.
+ */
 export const RPC_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ??
   (CLUSTER === "devnet"

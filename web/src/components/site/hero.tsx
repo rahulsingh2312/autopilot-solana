@@ -503,13 +503,17 @@ function FundPanel({ tracker }: { tracker: TrackerConfig }) {
           {deployed ? <NavFootnote /> : null}
 
           {deployed && snapshot ? (
+            // The token, not the vault. Someone reading this wants the address
+            // they can paste into a wallet or an explorer to see the thing they
+            // hold; the vault PDA is an implementation detail they cannot do
+            // anything with.
             <a
-              href={EXPLORER("address", snapshot.vaultAddress)}
+              href={EXPLORER("address", snapshot.shareMintAddress)}
               target="_blank"
               rel="noreferrer"
               className="num self-start text-[0.6875rem] text-faint underline decoration-dotted underline-offset-4 transition-colors hover:text-ink"
             >
-              vault {truncateAddress(snapshot.vaultAddress, 6)}
+              {snapshot.ticker} {truncateAddress(snapshot.shareMintAddress, 6)}
             </a>
           ) : null}
         </div>

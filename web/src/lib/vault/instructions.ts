@@ -1,4 +1,9 @@
-import { AccountRole, type Address, type Instruction } from "@solana/kit";
+import {
+  AccountRole,
+  type AccountMeta,
+  type Address,
+  type Instruction,
+} from "@solana/kit";
 
 import {
   ASSOCIATED_TOKEN_PROGRAM_ADDRESS,
@@ -20,6 +25,15 @@ type DepositParams = {
   depositorShares: Address;
   lamportsIn: bigint;
   minSharesOut: bigint;
+  /**
+   * From `buildOracleAccounts`: the SOL price, then a
+   * `(mint, vault token account, price)` triple per tokenized leg.
+   *
+   * Required whenever the basket holds anything tokenized — the program counts
+   * these and rejects a mismatch with `RemainingAccountsMismatch` rather than
+   * valuing a partial basket. Empty is correct only for an all-SOL basket.
+   */
+  oracleAccounts: AccountMeta[];
 };
 
 /**
@@ -43,6 +57,7 @@ export function getDepositInstruction(params: DepositParams): Instruction {
       { address: params.depositorShares, role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
       { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+      ...params.oracleAccounts,
     ],
     data: encodeDepositData(params.lamportsIn, params.minSharesOut),
   };
@@ -84,6 +99,8 @@ type RedeemParams = {
   holderShares: Address;
   sharesIn: bigint;
   minLamportsOut: bigint;
+  /** See `DepositParams.oracleAccounts` — a redemption values the basket too. */
+  oracleAccounts: AccountMeta[];
 };
 
 export function getRedeemForSolInstruction(params: RedeemParams): Instruction {
@@ -98,6 +115,7 @@ export function getRedeemForSolInstruction(params: RedeemParams): Instruction {
       { address: params.holderShares, role: AccountRole.WRITABLE },
       { address: TOKEN_PROGRAM_ADDRESS, role: AccountRole.READONLY },
       { address: SYSTEM_PROGRAM_ADDRESS, role: AccountRole.READONLY },
+      ...params.oracleAccounts,
     ],
     data: encodeRedeemForSolData(params.sharesIn, params.minLamportsOut),
   };

@@ -20,3 +20,8 @@ backend/.env
 # share tokens; losing them before launch means regrinding, and committing them
 # means anyone can front-run creating the tracker at that address.
 .keys/
+
+# Pusher secrets
+oracle-pusher/.env
+oracle-pusher/node_modules/
+oracle-pusher/*.log

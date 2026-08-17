@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useAction, useClient } from "@solana/react";
+import type { Address } from "@solana/kit";
 
 import type { AppClient } from "@/app/providers";
 import { EXPLORER, type TrackerConfig } from "@/lib/config";
@@ -15,6 +16,8 @@ import {
   solToLamports,
 } from "@/lib/format";
 import { findAssociatedTokenPda } from "@/lib/vault/program";
+import { buildOracleAccounts } from "@/lib/vault/oracle";
+import { tokenProgramOfMint } from "@/lib/leg-bindings";
 import {
   explainTransactionError,
   getCreateAssociatedTokenIdempotentInstruction,
@@ -132,6 +135,16 @@ export function TradeForm({
     // Without this the deposit fails account validation with
     // InvalidAccountOwner: an account that does not exist is system-owned, so
     // it is not a token account.
+    // Both directions value the basket, so both carry the oracle accounts.
+    // These are derived, not fetched: every one is checked on chain against the
+    // leg it claims to price, so a wrong address fails the transaction rather
+    // than mispricing it.
+    const oracleAccounts = await buildOracleAccounts(
+      trackerAccount,
+      snapshot.vaultAddress,
+      (mint) => tokenProgramOfMint(mint) as Address,
+    );
+
     const instruction =
       mode === "buy"
         ? getDepositInstruction({
@@ -143,6 +156,7 @@ export function TradeForm({
             depositorShares: holderShares,
             lamportsIn: quote.lamportsIn,
             minSharesOut: quote.minOut,
+            oracleAccounts,
           })
         : getRedeemForSolInstruction({
             holder: owner,
@@ -153,6 +167,7 @@ export function TradeForm({
             holderShares,
             sharesIn: quote.lamportsIn,
             minLamportsOut: quote.minOut,
+            oracleAccounts,
           });
 
     const instructions =

@@ -43,8 +43,8 @@ function VaultRow({ ticker }: { ticker: string }) {
       <td className="py-2.5 pr-2 sm:pr-3">
         {snapshot ? (
           <AddressLink
-            address={snapshot.vaultAddress}
-            label={truncateAddress(snapshot.vaultAddress, 5)}
+            address={snapshot.shareMintAddress}
+            label={truncateAddress(snapshot.shareMintAddress, 5)}
           />
         ) : (
           <span className="text-faint">…</span>
@@ -93,7 +93,7 @@ export function Proof() {
               <thead>
                 <tr className="text-left">
                   <th className="meta pb-2 pr-3 font-medium">Tracker</th>
-                  <th className="meta pb-2 pr-3 font-medium">Vault</th>
+                  <th className="meta pb-2 pr-3 font-medium">Token</th>
                   <th className="meta pb-2 text-right font-medium sm:pr-3">
                     In vault
                   </th>
