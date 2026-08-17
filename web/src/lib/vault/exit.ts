@@ -32,6 +32,7 @@
 
 import {
   AccountRole,
+  compileTransaction,
   getAddressDecoder,
   appendTransactionMessageInstructions,
   compressTransactionMessageUsingAddressLookupTables,
@@ -272,6 +273,7 @@ export async function sendSwapPlan(
     rpc: {
       getLatestBlockhash: () => { send: () => Promise<{ value: { blockhash: string; lastValidBlockHeight: bigint } }> };
       sendTransaction: (tx: string, config: object) => { send: () => Promise<string> };
+      simulateTransaction: (tx: string, config: object) => { send: () => Promise<{ value: { err: unknown } }> };
       getSignatureStatuses: (sigs: string[]) => { send: () => Promise<{ value: ({ err: unknown; confirmationStatus?: string } | null)[] }> };
     };
     payer: Parameters<typeof setTransactionMessageFeePayerSigner>[0];
@@ -292,6 +294,34 @@ export async function sendSwapPlan(
       message,
       plan.lookupTables as never,
     ) as typeof message;
+  }
+
+  /**
+   * Simulate before asking the wallet to sign.
+   *
+   * Phantom simulates every transaction it is handed and, when it cannot
+   * predict the outcome, shows "This dApp could be malicious" instead of a
+   * preview — and a transaction that *fails* simulation is the most common way
+   * to land there. Checking first means a doomed transaction is caught here,
+   * where it costs nothing and can be explained, rather than surfacing to the
+   * user as a security warning about the site they are on.
+   *
+   * `sigVerify: false` because the signature does not exist yet; that is the
+   * whole point of doing this before signing.
+   */
+  const unsigned = compileTransaction(message);
+  const { value: sim } = await client.rpc
+    .simulateTransaction(getBase64EncodedWireTransaction(unsigned as never), {
+      encoding: "base64",
+      commitment: "confirmed",
+      sigVerify: false,
+      replaceRecentBlockhash: true,
+    })
+    .send();
+  if (sim.err) {
+    throw new Error(
+      `The sale would fail on chain, so it was not sent. ${JSON.stringify(sim.err)}`,
+    );
   }
 
   const signed = await signTransactionMessageWithSigners(message);
