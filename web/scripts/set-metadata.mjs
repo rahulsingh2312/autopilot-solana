@@ -27,9 +27,19 @@ import {
   signTransactionMessageWithSigners,
 } from "@solana/kit";
 
-const RPC_URL =
-  process.env.RPC_URL ??
-  "https://devnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b";
+/**
+ * No default endpoint, deliberately.
+ *
+ * This line used to carry a Helius key inline, in a file committed to a public
+ * repository — anyone reading the repo could spend the quota. Pass RPC_URL
+ * explicitly instead; a missing endpoint should be a loud failure, not a
+ * silent fallback onto someone's paid key.
+ */
+const RPC_URL = process.env.RPC_URL;
+if (!RPC_URL) {
+  console.error("RPC_URL is required, e.g. RPC_URL=https://api.devnet.solana.com");
+  process.exit(1);
+}
 const PROGRAM_ID =
   process.env.PROGRAM_ID ?? "7Z3DAC8q4vgFr2ofxXonHT2jgJx3xk1bmQHsRjUmVAnY";
 const METADATA_PROGRAM = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";

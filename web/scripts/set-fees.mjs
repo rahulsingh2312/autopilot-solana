@@ -32,11 +32,17 @@ import {
   signTransactionMessageWithSigners,
 } from "@solana/kit";
 
-const RPC_URL =
-  process.env.RPC_URL ??
-  "https://devnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b";
-const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
-const SET_FEES = new Uint8Array([137, 178, 49, 58, 0, 245, 242, 190]);
+// No default endpoint: this line used to carry a Helius key inline, in a file
+// committed to a public repository. Pass RPC_URL explicitly.
+const RPC_URL = process.env.RPC_URL;
+if (!RPC_URL) {
+  console.error("RPC_URL is required");
+  process.exit(1);
+}
+const PROGRAM_ID =
+  process.env.PROGRAM_ID ?? "7Z3DAC8q4vgFr2ofxXonHT2jgJx3xk1bmQHsRjUmVAnY";
+// One byte, not an Anchor sighash: this targets the Pinocchio program.
+const IX_SET_FEES = 8;
 const MAX_FEE_PPM = 30_000; // 3%, mirrors the program's compiled ceiling
 
 const TICKERS = ["mbtSOL", "icSOL", "pltSOL", "cgSOL", "bwSOL", "jstSOL", "psqSOL"];
@@ -76,7 +82,7 @@ const data = getStructEncoder([
   ["disc", getBytesEncoder()],
   ["depositFeePpm", getU16Encoder()],
   ["redeemFeePpm", getU16Encoder()],
-]).encode({ disc: SET_FEES, depositFeePpm: depositPpm, redeemFeePpm: redeemPpm });
+]).encode({ disc: new Uint8Array([IX_SET_FEES]), depositFeePpm: depositPpm, redeemFeePpm: redeemPpm });
 
 console.log(
   `setting fees to ${(depositPpm / 10_000).toFixed(4)}% in / ` +
