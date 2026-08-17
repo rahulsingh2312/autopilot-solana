@@ -20,10 +20,9 @@ export function Performance({ tracker }: { tracker: TrackerConfig }) {
   const {
     windows,
     oneYear,
+    threeYear,
     coverageBps,
     benchmark,
-    benchmarkOneYear,
-    excess,
     basis,
     isLoading,
     error,
@@ -32,10 +31,25 @@ export function Performance({ tracker }: { tracker: TrackerConfig }) {
   // Nothing priced means nothing to say. A basket with no tokenized leg —
   // A basket whose names have no xStock between them lands here, and
   // an empty block is the honest render of it.
-  if (error || (!isLoading && oneYear === null)) return null;
+  if (error || (!isLoading && threeYear === null && oneYear === null)) return null;
 
   const benchWindow = (label: string) =>
     benchmark?.windows.find((w) => w.label === label)?.value ?? null;
+
+  /**
+   * The headline is the three-year number, annualised.
+   *
+   * It is a longer window than a single year and therefore says more about a
+   * basket than the last twelve months do. It is **not** comparable with the
+   * 1Y figure below it, which is a total rather than a rate, so the label has
+   * to carry "a yr" and the benchmark beside it has to be the 3Y benchmark —
+   * comparing an annualised basket against a one-year index would flatter or
+   * damn it by the difference in horizon alone.
+   */
+  const headline = threeYear;
+  const headlineBench = benchWindow("3Y");
+  const headlineExcess =
+    headline !== null && headlineBench !== null ? headline - headlineBench : null;
 
   return (
     <div className="glass-inset flex flex-col gap-2.5 p-3.5">
@@ -48,7 +62,7 @@ export function Performance({ tracker }: { tracker: TrackerConfig }) {
         ) : null}
       </div>
 
-      {isLoading && oneYear === null ? (
+      {isLoading && headline === null ? (
         <p className="text-[0.8125rem] text-faint">Reading price history…</p>
       ) : (
         <>
@@ -58,20 +72,20 @@ export function Performance({ tracker }: { tracker: TrackerConfig }) {
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span
               className={`num text-2xl font-semibold tabular-nums ${
-                (oneYear ?? 0) >= 0 ? "text-pos" : "text-neg"
+                (headline ?? 0) >= 0 ? "text-pos" : "text-neg"
               }`}
             >
-              {oneYear !== null ? formatReturn(oneYear) : "—"}
+              {headline !== null ? formatReturn(headline) : "—"}
             </span>
             <span className="num text-[0.6875rem] uppercase tracking-wider text-faint">
-              1Y
+              3Y a yr
             </span>
-            {benchmarkOneYear !== null && excess !== null ? (
+            {headlineBench !== null && headlineExcess !== null ? (
               <span className="text-[0.8125rem] text-muted">
-                S&amp;P {formatReturn(benchmarkOneYear)} ·{" "}
-                <span className={excess >= 0 ? "text-pos" : "text-neg"}>
-                  {excess >= 0 ? "beat by" : "behind by"}{" "}
-                  {formatReturn(Math.abs(excess)).replace(/^[+−]/, "")}
+                S&amp;P {formatReturn(headlineBench)} ·{" "}
+                <span className={headlineExcess >= 0 ? "text-pos" : "text-neg"}>
+                  {headlineExcess >= 0 ? "beat by" : "behind by"}{" "}
+                  {formatReturn(Math.abs(headlineExcess)).replace(/^[+−]/, "")}
                 </span>
               </span>
             ) : null}
