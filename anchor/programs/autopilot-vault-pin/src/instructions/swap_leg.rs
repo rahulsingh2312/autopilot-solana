@@ -76,23 +76,38 @@ pub const WSOL_MINT: [u8; 32] = [
 /// `invoke_signed_with_slice` would take any number but allocates on the heap,
 /// and this program declares `no_allocator!`, so the bound has to be static.
 ///
-/// **This is a stack budget, not a transaction budget.** An SBF frame is capped
-/// at 4 KB, and one `InstructionAccount` per slot is the largest thing this
-/// handler puts on the stack. An earlier version reserved 64 slots *and* kept
-/// parallel `[Address; 64]` / `[bool; 64]` arrays to work around a borrow, for
-/// a 7,552-byte frame — 3,360 over the limit. The program aborted after 510
-/// compute units with "Program failed to complete", which reads like anything
-/// but a stack overflow.
+/// # 46 is the ceiling, measured
+///
+/// An SBF frame is capped at 4 KB. Building at several values and reading the
+/// compiler's own number gives a straight line: 48 slots reports 4128, 56
+/// reports 4704, 64 reports 5280. That is **72 bytes per slot** on a 672-byte
+/// base, so the largest N that fits is `(4096 - 672) / 72 = 47.5`, and 47 does
+/// in fact report 4104 — eight bytes over. 46 is the answer.
+///
+/// 72 bytes is two arrays, not one: the `metas` array below, and the
+/// `[Account; N]` that `invoke_signed_with_bounds` builds internally. Shrinking
+/// only the visible one buys nothing.
+///
+/// # There is no headroom left
+///
+/// 40 was the previous value, and it made two of habitSOL's four legs
+/// unbuyable: PEPx and XOMx have no wSOL pool at all, only USDC, so every route
+/// to them is at least two hops. Those routes measured 46 and 43 accounts. 46
+/// therefore clears both — PEPx by nothing whatsoever.
+///
+/// A route that does not fit is refused here and the transaction fails, so the
+/// consequence is a swap that does not happen rather than one that goes wrong.
+/// But the durable fix is not a bigger constant: it is either a bump allocator
+/// with `invoke_signed_with_slice`, or permitting USDC as an intermediate so
+/// both hops can be direct routes of ~25 accounts each.
 ///
 /// `cargo-build-sbf` does warn, on a line beginning `Error: Function … Stack
 /// offset of N exceeded max offset of 4096`. It is not a build failure, so it
-/// is easy to filter out of build output and never see.
-///
-/// A live Jupiter direct route uses 25 accounts; 40 leaves headroom for a
-/// two-hop
-/// route while keeping the frame under 4 KB — 48 was 32 bytes over.
-#[cfg(any(target_os = "solana", target_arch = "bpf", feature = "host-pda"))]
-const MAX_ROUTE_ACCOUNTS: usize = 40;
+/// is easy to filter out of build output and never see. It is also easy to
+/// mistake a *failed* build for a clean one: without `--features
+/// bpf-entrypoint` this crate does not compile at all, and a grep for stack
+/// warnings then finds nothing and looks like success.
+const MAX_ROUTE_ACCOUNTS: usize = 46;
 
 #[cfg(any(target_os = "solana", target_arch = "bpf", feature = "host-pda"))]
 use {

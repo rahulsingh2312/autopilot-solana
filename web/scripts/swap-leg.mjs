@@ -281,8 +281,15 @@ const ATTEMPTS = [
   { maxAccounts: MAX_ROUTE_ACCOUNTS, useSharedAccounts: true },
 ];
 
-/** The program's hard bound. Exceeding it is `RemainingAccountsMismatch`. */
-const PROGRAM_ROUTE_LIMIT = 40;
+/**
+ * The program's hard bound. Exceeding it is `RemainingAccountsMismatch`.
+ *
+ * 46 is the largest value that fits an SBF stack frame: 72 bytes per slot on a
+ * 672-byte base against a 4096-byte cap. See `swap_leg.rs` for the measurement.
+ * PEPx's cheapest route is exactly 46 accounts, so this clears it by nothing at
+ * all — a route that does not fit is refused before anything is sent.
+ */
+const PROGRAM_ROUTE_LIMIT = 46;
 
 let quote, route, routeData, built;
 for (const [i, attempt] of ATTEMPTS.entries()) {
