@@ -143,7 +143,7 @@ export function Proof() {
                 </dd>
               </div>
 
-              <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
+              {/* <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
                 <dt className="meta">Audit</dt>
                 <dd className="flex items-center gap-1.5 text-ink">
                   <span
@@ -152,7 +152,7 @@ export function Proof() {
                   />
                   Under audit
                 </dd>
-              </div>
+              </div> */}
 
               <div className="flex items-baseline justify-between gap-4 border-t border-black/[0.07] px-5 py-3">
                 <dt className="meta">Source</dt>

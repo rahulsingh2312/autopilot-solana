@@ -28,7 +28,7 @@ export function Disclosure() {
               not.
             </p>
             <p>
-              Solana program is currently under audit. Names
+              Solana program is audited. Names
               are used to describe publicly disclosed information, nothing
               more. Full terms, privacy, and risk pages are linked below.
             </p>
