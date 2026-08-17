@@ -17,6 +17,7 @@ import {
 } from "@/lib/format";
 import { findAssociatedTokenPda } from "@/lib/vault/program";
 import { buildOracleAccounts, findAssociatedTokenPdaFor } from "@/lib/vault/oracle";
+import { planSwapToSol, sendSwapPlan } from "@/lib/vault/exit";
 import { tokenProgramOfMint } from "@/lib/leg-bindings";
 import {
   explainTransactionError,
@@ -69,6 +70,8 @@ export function TradeForm({
   const client = useClient<AppClient>();
   const owner = useWalletAddress();
   const [mode, setMode] = useState<Mode>("buy");
+  /** Progress text while a multi-transaction exit runs. */
+  const [step, setStep] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
 
   const { lamports: solBalance, refresh: refreshSol } = useSolBalance(owner);
@@ -272,10 +275,62 @@ export function TradeForm({
             ]
           : [instruction];
 
+    /**
+     * Selling for SOL out of a vault that holds stock.
+     *
+     * The sleeve cannot cover it and the program will not sell on the holder's
+     * behalf, so the sale happens here: take the basket in kind, then sell each
+     * leg through Jupiter from the holder's own wallet.
+     *
+     * Sequential, and it has to be. `redeem_in_kind` pays
+     * `vault_balance × shares ÷ supply`, and the vault's balance can move
+     * between quoting and signing — so the amounts are read back after the burn
+     * rather than assumed. Each leg is then quoted against what actually
+     * arrived.
+     */
+    if (sellThrough) {
+      setStep(`Taking the basket (1 of ${snapshot.holdings.length + 1})`);
+      await client.sendTransaction(instructions, { abortSignal: signal });
+
+      let last = "";
+      for (const [i, h] of snapshot.holdings.entries()) {
+        const tokenProgram = tokenProgramOfMint(h.mint) as Address;
+        const ata = await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram);
+
+        // What actually landed, not what was projected.
+        const { value } = await client.rpc
+          .getTokenAccountBalance(ata, { commitment: "confirmed" })
+          .send();
+        const balance = BigInt(value.amount);
+        if (balance === 0n) continue;
+
+        const symbol = tracker.legs[h.index]?.symbol ?? "leg";
+        setStep(`Selling ${symbol} (${i + 2} of ${snapshot.holdings.length + 1})`);
+
+        const plan = await planSwapToSol({
+          owner,
+          leg: { mint: h.mint as Address, symbol, decimals: h.decimals },
+          amount: balance,
+        });
+        // A leg with no route at this size is left with the holder rather than
+        // failing the whole exit. They keep the asset, and the message says so.
+        if (!plan) continue;
+
+        last = await sendSwapPlan(client as never, plan, signal);
+      }
+
+      setStep(null);
+      onSettled();
+      refreshSol();
+      refreshShares();
+      return last;
+    }
+
     const result = await client.sendTransaction(instructions, {
       abortSignal: signal,
     });
 
+    setStep(null);
     onSettled();
     refreshSol();
     refreshShares();
@@ -283,16 +338,18 @@ export function TradeForm({
   });
 
   /**
-   * A SOL redemption larger than the sleeve is refused here rather than on
-   * chain. The program computes the holder's gross claim, checks it against
-   * the vault's lamports and reverts — so letting the button through would
-   * spend a signature to learn what this already knows.
+   * Whether selling for SOL has to go the long way round.
+   *
+   * Below the sleeve, `redeem_for_sol` settles it in one transaction. Above it,
+   * that instruction computes a correct payout and then reverts on its reserve
+   * check, so the exit becomes take-in-kind plus a sale per leg. Same outcome,
+   * more signatures.
    */
-  const exceedsSleeve =
+  const sellThrough =
     mode === "redeem" && quote !== null && quote.lamportsIn > maxSolRedeemShares;
 
   const disabled =
-    !owner || !valid || !quote || insufficient || isRunning || paused || exceedsSleeve;
+    !owner || !valid || !quote || insufficient || isRunning || paused;
 
   return (
     <div className="flex flex-col gap-4">
@@ -424,18 +481,15 @@ export function TradeForm({
               gross claim against it, so past this point the transaction
               reverts rather than paying part. Better said here than by a
               wallet. */}
-          {mode === "redeem" && quote.lamportsIn > maxSolRedeemShares ? (
-            <p className="border-t border-rule pt-2 text-[0.75rem] text-neg">
-              The vault only holds {formatSol(snapshot.sleeveLamports)} SOL — the rest is
-              in stock. Redeem up to {formatShares(maxSolRedeemShares)} for SOL, or use
-              <button
-                type="button"
-                onClick={() => { setMode("stocks"); reset(); }}
-                className="mx-1 underline decoration-dotted underline-offset-2 hover:text-ink"
-              >
-                Take stocks
-              </button>
-              to withdraw the whole position.
+          {sellThrough ? (
+            <p className="border-t border-rule pt-2 text-[0.75rem] text-muted">
+              The vault holds {formatSol(snapshot.sleeveLamports)} SOL and the rest in
+              stock, so this takes the basket out and sells it for you through Jupiter:{" "}
+              <strong className="font-medium text-ink">
+                {snapshot.holdings.length + 1} transactions
+              </strong>{" "}
+              to sign. You pay the swap costs, and anything without a route at this size
+              stays in your wallet as stock.
             </p>
           ) : null}
 
@@ -491,7 +545,7 @@ export function TradeForm({
           className="btn btn-grad w-full"
         >
           {isRunning
-            ? "Confirm in your wallet"
+            ? (step ?? "Confirm in your wallet")
             : paused
               ? "Deposits paused"
               : insufficient
@@ -504,8 +558,8 @@ export function TradeForm({
                     ? `Buy ${tracker.ticker}`
                     : mode === "stocks"
                       ? "Take the stocks"
-                      : exceedsSleeve
-                        ? "More SOL than the vault holds"
+                      : sellThrough
+                        ? "Sell the basket for SOL"
                         : "Redeem for SOL"}
         </button>
       )}
