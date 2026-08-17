@@ -21,14 +21,21 @@
  * holder's exit becomes take-in-kind plus a sale per leg: three signatures
  * instead of one.
  *
- * Holding a deliberate cash buffer solves both. Above the buffer, buy the
- * basket; below it, sell back. Every ordinary redemption then settles from the
- * sleeve in one transaction with no Jupiter involved at all, and the multi-step
- * exit only ever appears for someone withdrawing more than the buffer covers.
+ * The answer is to stay invested and hold only what operations require. A
+ * holder paid SOL to own stocks; cash sitting in the vault is not what they
+ * bought, and a fund carrying 15% cash lags its own basket by 15% of whatever
+ * the basket does.
  *
- * The cost is tracking error: a vault holding 15% cash lags its basket by 15%
- * of whatever the basket does. That is the trade every real fund makes for the
- * same reason, and it is stated on the site rather than hidden in a keeper.
+ * So the floor is a fixed number of lamports, not a share of the fund. It
+ * exists so the vault can always cover its own rent and never lands in a state
+ * where the next instruction fails for want of a few thousand lamports. It does
+ * not scale with the fund, because nothing about paying rent does.
+ *
+ * The cost of that choice lands on redemption: `redeem_for_sol` can only settle
+ * what the sleeve holds, so exiting a fully invested vault means taking the
+ * basket and selling it — one transaction for the stock, a few more for the
+ * sale. That is the honest shape of a fund that actually holds its assets, and
+ * the alternative is a cash pile wearing a basket's name.
  *
  * # Why it will not churn
  *
@@ -55,6 +62,7 @@ import {
   planRoute,
   readVault,
   resolveLookupTables,
+  rpcRetry,
   sendOrSimulate,
 } from "./lib/vault-ops.mjs";
 
@@ -66,13 +74,12 @@ if (!RPC_URL) {
 const SEND = process.env.SEND === "1";
 
 /**
- * Cash kept back, in basis points of net assets.
+ * Cash held as a share of the fund. Zero, deliberately.
  *
- * Sized so an ordinary redemption settles from the sleeve in one transaction.
- * Too low and every exit becomes a three-signature sell-through; too high and
- * the fund is a cash pile wearing a basket's name.
+ * Set it above zero only to trade tracking for one-transaction redemptions,
+ * and know that is the trade being made.
  */
-const BUFFER_BPS = Number(process.env.BUFFER_BPS ?? 1500); // 15%
+const BUFFER_BPS = Number(process.env.BUFFER_BPS ?? 0);
 
 /** How far a leg must drift from target before it is worth a trade. */
 const DRIFT_BPS = Number(process.env.DRIFT_BPS ?? 200); // 2 percentage points
@@ -85,8 +92,15 @@ const DRIFT_BPS = Number(process.env.DRIFT_BPS ?? 200); // 2 percentage points
  */
 const MIN_TRADE_LAMPORTS = BigInt(process.env.MIN_TRADE_LAMPORTS ?? 5_000_000); // 0.005 SOL
 
-/** Never spend the last of the sleeve; the vault must stay above its rent. */
-const FLOOR_LAMPORTS = 2_000_000n;
+/**
+ * The only SOL the vault deliberately keeps: enough to operate, and no more.
+ *
+ * A flat figure rather than a percentage, because what it covers — staying
+ * above rent, having lamports on hand for the next instruction — does not grow
+ * with the fund. On a large vault it rounds to nothing; on a small one it is
+ * the difference between working and not.
+ */
+const FLOOR_LAMPORTS = BigInt(process.env.FLOOR_LAMPORTS ?? 2_000_000); // 0.002 SOL
 
 const rpc = createSolanaRpc(RPC_URL);
 const signer = await createKeyPairSignerFromBytes(
@@ -105,7 +119,10 @@ let traded = 0;
 let planned = 0;
 
 console.log(`keeper    ${signer.address}  ${SEND ? "SENDING" : "simulating"}`);
-console.log(`buffer    ${BUFFER_BPS / 100}%   drift ${DRIFT_BPS / 100}pp   min trade ${sol(MIN_TRADE_LAMPORTS)} SOL\n`);
+console.log(
+  `floor     ${sol(FLOOR_LAMPORTS)} SOL${BUFFER_BPS ? ` + ${BUFFER_BPS / 100}%` : ""}` +
+    `   drift ${DRIFT_BPS / 100}pp   min trade ${sol(MIN_TRADE_LAMPORTS)} SOL\n`,
+);
 
 for (const ticker of tickers) {
   const v = await readVault(rpc, ticker);
@@ -122,13 +139,15 @@ for (const ticker of tickers) {
     continue;
   }
 
-  // The buffer comes off the top; the basket's weights apply to what is left.
-  const bufferTarget = (v.netAssets * BigInt(BUFFER_BPS)) / 10_000n;
+  // Everything above the operating floor is the basket's. `BUFFER_BPS` is
+  // normally zero, so this is `netAssets - floor`.
+  const bufferTarget =
+    (v.netAssets * BigInt(BUFFER_BPS)) / 10_000n + FLOOR_LAMPORTS;
   const investable = v.netAssets > bufferTarget ? v.netAssets - bufferTarget : 0n;
 
   console.log(
     `${ticker.padEnd(9)} NAV ${sol(v.netAssets)} SOL   sleeve ${sol(v.sleeve)} ` +
-      `(${((Number(v.sleeve) * 100) / Number(v.netAssets)).toFixed(1)}%, target ${BUFFER_BPS / 100}%)`,
+      `(${((Number(v.sleeve) * 100) / Number(v.netAssets)).toFixed(1)}%, keeping ${sol(bufferTarget)})`,
   );
 
   for (const leg of v.legs) {
@@ -176,9 +195,9 @@ for (const ticker of tickers) {
 
     const instructions = [];
     // The program wraps into this account but does not create it.
-    const { value: wsolInfo } = await rpc
-      .getAccountInfo(vaultWsol, { encoding: "base64", commitment: "confirmed" })
-      .send();
+    const { value: wsolInfo } = await rpcRetry(() =>
+      rpc.getAccountInfo(vaultWsol, { encoding: "base64", commitment: "confirmed" }).send(),
+    );
     if (!wsolInfo) {
       instructions.push(
         ixCreateAta({

@@ -201,9 +201,9 @@ export function TradeForm({
     // In-kind delivery needs, per leg in basket order: the mint, the vault's
     // token account, and the holder's. No oracle accounts — this path never
     // consults a price, which is exactly why it still works when one is stale.
-    // Both the in-kind tab and the sell-through exit burn shares for the
-    // basket; they differ only in what happens to it afterwards.
-    const takesBasket = mode === "stocks" || sellThrough;
+    // Only the stocks tab takes delivery. Selling for SOL now settles out of
+    // the sleeve, because the server has already refilled it.
+    const takesBasket = mode === "stocks";
 
     const legAccounts: Address[] = [];
     if (takesBasket) {
@@ -298,62 +298,39 @@ export function TradeForm({
      * rather than assumed. Each leg is then quoted against what actually
      * arrived.
      */
+    /**
+     * Selling for SOL out of a fully invested vault.
+     *
+     * The vault sells the holder's share first, server-side, in its own name.
+     * Only then is a signature requested, and it is a plain `redeem_for_sol`
+     * settled out of the sleeve — one transaction, no Jupiter, nothing for the
+     * holder to sign twice.
+     */
     if (sellThrough) {
-      setStep("Taking the basket out");
-      await client.sendTransaction(instructions, { abortSignal: signal });
-
-      // Quoted against what actually landed. `redeem_in_kind` pays
-      // `vault_balance × shares ÷ supply`, and the vault's balance can move
-      // between quoting and signing, so the amounts are read rather than
-      // assumed.
-      setStep("Pricing the sale");
-      const plans = [];
-      const kept: string[] = [];
-      for (const h of snapshot.holdings) {
-        const tokenProgram = tokenProgramOfMint(h.mint) as Address;
-        const ata = await findAssociatedTokenPdaFor(owner, h.mint as Address, tokenProgram);
-        const { value } = await client.rpc
-          .getTokenAccountBalance(ata, { commitment: "confirmed" })
-          .send();
-        const balance = BigInt(value.amount);
-        const symbol = tracker.legs[h.index]?.symbol ?? "leg";
-        if (balance === 0n) continue;
-
-        const plan = await planSwapToSol({
+      setStep("Selling your share");
+      const prepared = await fetch("/api/vault/prepare-redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: tracker.ticker,
           owner,
-          leg: { mint: h.mint as Address, symbol, decimals: h.decimals },
-          amount: balance,
-          fetchLookupTables: (addresses) => fetchLookupTables(client as never, addresses),
-        });
-        // No route at this size leaves the holder the asset rather than
-        // failing the exit they already paid a signature for.
-        if (!plan) { kept.push(symbol); continue; }
-        plans.push(plan);
-      }
+          shares: quote.lamportsIn.toString(),
+        }),
+        signal,
+      }).then((r) => r.json());
 
-      const batches = await packSwapPlans(plans, (subset) =>
-        measureBatch(client as never, subset),
-      );
-
-      let last = "";
-      for (const [i, batch] of batches.entries()) {
-        setStep(
-          batches.length === 1
-            ? "Selling the basket"
-            : `Selling ${batch.map((p) => p.symbol).join(", ")} (${i + 1} of ${batches.length})`,
+      if (prepared.error) throw new Error(prepared.error);
+      if (!prepared.ready) {
+        throw new Error(
+          "One of the holdings could not be sold right now. You can still take the basket as stock.",
         );
-        last = await sendSwapBatch(client as never, batch, signal);
       }
 
-      setStep(null);
-      onSettled();
-      refreshSol();
-      refreshShares();
-      if (kept.length > 0) {
-        // Not an error: the position was exited, some of it as stock.
-        console.warn(`kept as stock, no route: ${kept.join(", ")}`);
-      }
-      return last;
+      // Nothing needs rebuilding. The instruction carries the share count and
+      // the program recomputes the payout from the vault as it stands, so the
+      // sale that just happened is already reflected. `minLamportsOut` still
+      // guards the holder against the sleeve being drained in between.
+      setStep("Claiming your SOL");
     }
 
     const result = await client.sendTransaction(instructions, {
@@ -514,8 +491,8 @@ export function TradeForm({
               wallet. */}
           {sellThrough ? (
             <p className="border-t border-rule pt-2 text-[0.75rem] text-muted">
-              The vault holds stock, so this sells it for you on the way out. A
-              couple of transactions to sign.
+              Your share of the stocks is sold first, then you sign once to claim
+              the SOL. Takes a few seconds.
             </p>
           ) : null}
 

@@ -59,15 +59,36 @@ const u64le = (v) => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Retry a call that was throttled.
+ *
+ * The keeper reads a few dozen accounts per pass and does it in a burst, which
+ * a shared endpoint answers with 429 rather than an error worth reporting.
+ * Honours `retry-after` when one is sent, and backs off otherwise.
+ */
+export async function rpcRetry(fn, attempts = 6) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      const throttled =
+        e?.context?.statusCode === 429 || String(e?.message ?? "").includes("429");
+      if (!throttled || i >= attempts - 1) throw e;
+      const after = Number(e?.context?.headers?.get?.("retry-after") ?? 0);
+      await sleep(after > 0 ? after * 1000 : 400 * 2 ** i);
+    }
+  }
+}
+
 export const bindingOf = (mint) =>
   Object.values(LEG_BINDINGS).find((b) => b.mint === mint) ?? null;
 
 /** A Pyth price, read the way the program reads it. */
 export async function readPrice(rpc, feedHex) {
   const account = await findPythPriceAccount(feedHex);
-  const { value } = await rpc
-    .getAccountInfo(account, { encoding: "base64", commitment: "confirmed" })
-    .send();
+  const { value } = await rpcRetry(() =>
+    rpc.getAccountInfo(account, { encoding: "base64", commitment: "confirmed" }).send(),
+  );
   if (!value) throw new Error(`no price account for ${feedHex.slice(0, 8)}`);
   const d = Buffer.from(value.data[0], "base64");
   if (d[40] !== 1) throw new Error("price update is not Full verification");
@@ -85,13 +106,15 @@ export async function readVault(rpc, ticker) {
   const trackerAddress = await findTrackerPda(ticker);
   const vault = await findVaultPda(trackerAddress);
 
-  const { value: info } = await rpc
-    .getAccountInfo(trackerAddress, { encoding: "base64", commitment: "confirmed" })
-    .send();
+  const { value: info } = await rpcRetry(() =>
+    rpc.getAccountInfo(trackerAddress, { encoding: "base64", commitment: "confirmed" }).send(),
+  );
   if (!info) return null;
   const tracker = decodeTracker(Uint8Array.from(Buffer.from(info.data[0], "base64")));
 
-  const { value: lamports } = await rpc.getBalance(vault, { commitment: "confirmed" }).send();
+  const { value: lamports } = await rpcRetry(() =>
+    rpc.getBalance(vault, { commitment: "confirmed" }).send(),
+  );
   const sleeve = BigInt(lamports) - tracker.rentReserve;
   const solPrice = await readPrice(rpc, SOL_FEED);
 
@@ -101,10 +124,9 @@ export async function readVault(rpc, ticker) {
     const b = bindingOf(leg.mint);
     if (!b) continue;
     const ata = await findAssociatedTokenPdaFor(vault, leg.mint, b.tokenProgram);
-    const bal = await rpc
-      .getTokenAccountBalance(ata, { commitment: "confirmed" })
-      .send()
-      .catch(() => ({ value: null }));
+    const bal = await rpcRetry(() =>
+      rpc.getTokenAccountBalance(ata, { commitment: "confirmed" }).send(),
+    ).catch(() => ({ value: null }));
 
     const amount = bal.value ? BigInt(bal.value.amount) : 0n;
     const decimals = bal.value ? bal.value.decimals : 8;
@@ -194,9 +216,9 @@ export async function resolveLookupTables(rpc, plan) {
   const missing = plan.lookupTableNames.filter((t) => !plan.lookupTables[t]);
   if (missing.length === 0) return plan.lookupTables;
 
-  const { value } = await rpc
-    .getMultipleAccounts(missing, { encoding: "base64", commitment: "confirmed" })
-    .send();
+  const { value } = await rpcRetry(() =>
+    rpc.getMultipleAccounts(missing, { encoding: "base64", commitment: "confirmed" }).send(),
+  );
   const decoder = getAddressDecoder();
   value.forEach((info, i) => {
     if (!info) return;
@@ -273,7 +295,7 @@ export function ixCreateAta({ payer, owner, mint, ata, tokenProgram }) {
  * real money to discover on chain, and the keeper runs unattended.
  */
 export async function sendOrSimulate({ rpc, signer, instructions, lookupTables, send }) {
-  const { value: blockhash } = await rpc.getLatestBlockhash().send();
+  const { value: blockhash } = await rpcRetry(() => rpc.getLatestBlockhash().send());
   let message = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayerSigner(signer, m),
@@ -289,14 +311,14 @@ export async function sendOrSimulate({ rpc, signer, instructions, lookupTables, 
   const wire = getBase64EncodedWireTransaction(signed);
   const bytes = Buffer.from(wire, "base64").length;
 
-  const { value: sim } = await rpc
-    .simulateTransaction(wire, {
+  const { value: sim } = await rpcRetry(() =>
+    rpc.simulateTransaction(wire, {
       encoding: "base64",
       commitment: "confirmed",
       replaceRecentBlockhash: false,
       sigVerify: true,
-    })
-    .send();
+    }).send(),
+  );
   if (sim.err) {
     const show = (v) => JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x));
     return { ok: false, bytes, error: show(sim.err), logs: sim.logs ?? [] };
@@ -304,11 +326,11 @@ export async function sendOrSimulate({ rpc, signer, instructions, lookupTables, 
   if (!send) return { ok: true, bytes, cu: sim.unitsConsumed, signature: null };
 
   const signature = getSignatureFromTransaction(signed);
-  await rpc
-    .sendTransaction(wire, { encoding: "base64", preflightCommitment: "confirmed" })
-    .send();
+  await rpcRetry(() =>
+    rpc.sendTransaction(wire, { encoding: "base64", preflightCommitment: "confirmed" }).send(),
+  );
   for (let i = 0; i < 60; i++) {
-    const { value } = await rpc.getSignatureStatuses([signature]).send();
+    const { value } = await rpcRetry(() => rpc.getSignatureStatuses([signature]).send());
     if (value[0]?.err) return { ok: false, bytes, error: JSON.stringify(value[0].err), logs: [] };
     if (value[0]?.confirmationStatus === "confirmed" || value[0]?.confirmationStatus === "finalized") {
       return { ok: true, bytes, cu: sim.unitsConsumed, signature };
