@@ -1,9 +1,9 @@
 {
   "name": "Ackman Tracker",
   "symbol": "psqSOL",
-  "description": "Eleven positions, $13.7B, and a post about every one of them. Deposit SOL to mint psqSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and psqSOL holdings update when it changes. Holdings: BN, AMZN, UBER, MSFT, QSR. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://autopilot-solana.vercel.app/tokens/psqsol.png",
-  "external_url": "https://autopilot-solana.vercel.app",
+  "description": "Eleven positions, $13.7B, and a post about every one of them. Deposit SOL to mint psqSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and psqSOL holdings update when it changes. Holdings: BN, AMZN, UBER, MSFT, QSR. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://sol.copycat.my/tokens/psqsol.png",
+  "external_url": "https://sol.copycat.my",
   "attributes": [
     {
       "trait_type": "Tracks",

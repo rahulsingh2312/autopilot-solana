@@ -77,6 +77,12 @@ pub enum VaultError {
     UnknownInstruction = 6043,
     /// Handler exists in the layout but is not implemented yet.
     NotImplemented = 6044,
+    /// An account the handler must write to was passed read-only.
+    ///
+    /// Split out from [`Self::InvalidAccountOwner`], which `require_writable`
+    /// used to return. A writability problem reported as an ownership problem
+    /// sends whoever is debugging it to look at the wrong thing entirely.
+    NotWritable = 6045,
 }
 
 impl From<VaultError> for ProgramError {

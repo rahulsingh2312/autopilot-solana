@@ -1,9 +1,9 @@
 {
   "name": "Tepper Tracker",
   "symbol": "dtSOL",
-  "description": "Thirty-one positions. He does not hedge his opinions with diversification. Deposit SOL to mint dtSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and dtSOL holdings update when it changes. Holdings: AMZN, MU, GOOG, UBER, TSM. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://autopilot-solana.vercel.app/tokens/dtsol.png",
-  "external_url": "https://autopilot-solana.vercel.app",
+  "description": "Thirty-one positions. He does not hedge his opinions with diversification. Deposit SOL to mint dtSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and dtSOL holdings update when it changes. Holdings: AMZN, MU, GOOG, UBER, TSM. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://sol.copycat.my/tokens/dtsol.png",
+  "external_url": "https://sol.copycat.my",
   "attributes": [
     {
       "trait_type": "Tracks",

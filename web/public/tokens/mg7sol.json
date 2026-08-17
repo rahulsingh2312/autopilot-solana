@@ -1,9 +1,9 @@
 {
   "name": "Magnificent Seven",
   "symbol": "mg7SOL",
-  "description": "The seven companies that ate the index. Equal weighted, so the biggest one does not become the whole thing. Deposit SOL to mint mg7SOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and mg7SOL holdings update when it changes. Holdings: NVDA, MSFT, AAPL, AMZN, GOOGL, META, TSLA. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://autopilot-solana.vercel.app/tokens/mg7sol.png",
-  "external_url": "https://autopilot-solana.vercel.app",
+  "description": "The seven companies that ate the index. Equal weighted, so the biggest one does not become the whole thing. Deposit SOL to mint mg7SOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and mg7SOL holdings update when it changes. Holdings: NVDA, MSFT, AAPL, AMZN, GOOGL, META, TSLA. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://sol.copycat.my/tokens/mg7sol.png",
+  "external_url": "https://sol.copycat.my",
   "attributes": [
     {
       "trait_type": "Tracks",
@@ -11,7 +11,7 @@
     },
     {
       "trait_type": "Source",
-      "value": "Editorial. Curated by Autopilot."
+      "value": "Editorial. Curated by Copycat."
     },
     {
       "trait_type": "Rebalance",

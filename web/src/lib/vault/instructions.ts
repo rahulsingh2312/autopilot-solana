@@ -211,6 +211,7 @@ const PROGRAM_ERRORS: Record<number, string> = {
   6042: "That instruction was malformed.",
   6043: "This site sent an instruction the program does not have.",
   6044: "That instruction is not implemented.",
+  6045: "An account this needs to write to was passed as read-only.",
 };
 
 /**

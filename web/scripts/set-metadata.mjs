@@ -14,7 +14,6 @@ import {
   appendTransactionMessageInstructions,
   createKeyPairSignerFromBytes,
   createSolanaRpc,
-  createSolanaRpcSubscriptions,
   createTransactionMessage,
   getAddressEncoder,
   getProgramDerivedAddress,
@@ -22,7 +21,7 @@ import {
   getBytesEncoder,
   getU32Encoder,
   pipe,
-  sendAndConfirmTransactionFactory,
+  getBase64EncodedWireTransaction,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
   signTransactionMessageWithSigners,
@@ -31,13 +30,27 @@ import {
 const RPC_URL =
   process.env.RPC_URL ??
   "https://devnet.helius-rpc.com/?api-key=397b5828-cbba-479e-992e-7000c78d482b";
-const PROGRAM_ID = "8cKanyTRdgbdf8eWiLpqzy3kwzsXWXNxQdd6NRauCSNK";
+const PROGRAM_ID =
+  process.env.PROGRAM_ID ?? "7Z3DAC8q4vgFr2ofxXonHT2jgJx3xk1bmQHsRjUmVAnY";
 const METADATA_PROGRAM = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
 const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const RENT_SYSVAR = "SysvarRent111111111111111111111111111111111";
-const SITE = "https://autopilot-solana.vercel.app";
+// The live domain. Wallets and explorers fetch this URI forever, so it has to
+// be the canonical one rather than the Vercel preview host.
+const SITE = process.env.SITE ?? "https://sol.copycat.my";
 
-const SET_METADATA_DISC = new Uint8Array([218, 126, 122, 193, 220, 149, 103, 39]);
+/**
+ * One byte, not an 8-byte Anchor sighash — this targets the Pinocchio program.
+ *
+ * The payload is length-prefixed with a single `u8` per field rather than
+ * borsh's `u32`, and the program bounds each against Metaplex's own limits
+ * (32 / 10 / 200) so an over-long name fails as our error rather than as an
+ * opaque CPI failure.
+ */
+const IX_SET_TOKEN_METADATA = 6;
+const MAX_NAME = 32;
+const MAX_SYMBOL = 10;
+const MAX_URI = 200;
 
 /**
  * Read straight from config.ts rather than repeated here.
@@ -48,16 +61,53 @@ const SET_METADATA_DISC = new Uint8Array([218, 126, 122, 193, 220, 149, 103, 39]
  * wallet shows forever, so it should not depend on someone remembering to
  * edit a second list.
  */
-const TOKENS = (
-  await import("../src/lib/config.ts")
-).TRACKERS.map((t) => ({
+const TOKENS = (await import("../src/lib/config.ts")).TRACKERS.map((t) => ({
   ticker: t.ticker,
   name: t.name,
   symbol: t.ticker,
   uri: `${SITE}/tokens/${t.ticker.toLowerCase()}.json`,
 }));
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const isRateLimit = (e) =>
+  e?.context?.statusCode === 429 || String(e?.message ?? "").includes("429");
+
+/**
+ * Retry an RPC call on 429. The public devnet endpoint throttles a burst of
+ * nine metadata writes reliably, and a throttled read is not a failure.
+ */
+async function rpcRetry(fn, attempts = 8) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!isRateLimit(e) || i >= attempts - 1) throw e;
+      const after = Number(e?.context?.headers?.["retry-after"] ?? 0);
+      await sleep(after > 0 ? after * 1000 : 2000 * (i + 1));
+    }
+  }
+}
+
 const utf8 = new TextEncoder();
+
+/** `disc || len:u8 || bytes` per field. */
+function encodeMetadata(token) {
+  const field = (value, max, label) => {
+    const b = utf8.encode(value);
+    if (b.length === 0 || b.length > max) {
+      throw new Error(
+        `${token.ticker}: ${label} is ${b.length} bytes, max ${max}`,
+      );
+    }
+    return concat([new Uint8Array([b.length]), b]);
+  };
+  return concat([
+    new Uint8Array([IX_SET_TOKEN_METADATA]),
+    field(token.name, MAX_NAME, "name"),
+    field(token.symbol, MAX_SYMBOL, "symbol"),
+    field(token.uri, MAX_URI, "uri"),
+  ]);
+}
 const addrEnc = getAddressEncoder();
 const u32 = getU32Encoder();
 
@@ -86,13 +136,29 @@ const secret = JSON.parse(
 const signer = await createKeyPairSignerFromBytes(new Uint8Array(secret));
 
 const rpc = createSolanaRpc(RPC_URL);
-const sendAndConfirm = sendAndConfirmTransactionFactory({
-  rpc,
-  rpcSubscriptions: createSolanaRpcSubscriptions(RPC_URL.replace(/^http/, "ws")),
-});
+// Confirmation by polling rather than websocket subscription: the public
+// endpoints throttle subscriptions hard enough that a dropped socket reads as a
+// failed write when the transaction actually landed.
+async function confirm(signature) {
+  for (let i = 0; i < 60; i++) {
+    const { value } = await rpcRetry(() =>
+      rpc.getSignatureStatuses([signature]).send(),
+    );
+    const status = value[0];
+    if (status?.err) {
+      throw new Error(`transaction failed: ${JSON.stringify(status.err)}`);
+    }
+    if (status?.confirmationStatus) return;
+    await sleep(1000);
+  }
+  throw new Error(`timed out confirming ${signature}`);
+}
 
 for (const token of TOKENS) {
-  const tracker = await pda(PROGRAM_ID, [utf8.encode("tracker"), utf8.encode(token.ticker)]);
+  const tracker = await pda(PROGRAM_ID, [
+    utf8.encode("tracker"),
+    utf8.encode(token.ticker),
+  ]);
   const mint = await pda(PROGRAM_ID, [
     utf8.encode("share"),
     new Uint8Array(addrEnc.encode(tracker)),
@@ -103,9 +169,13 @@ for (const token of TOKENS) {
     new Uint8Array(addrEnc.encode(mint)),
   ]);
 
-  const { value: existing } = await rpc.getAccountInfo(metadata, { encoding: "base64" }).send();
+  const { value: existing } = await rpcRetry(() =>
+    rpc.getAccountInfo(metadata, { encoding: "base64" }).send(),
+  );
   if (existing) {
-    console.log(`${token.ticker.padEnd(8)} metadata already exists  ${metadata}`);
+    console.log(
+      `${token.ticker.padEnd(8)} metadata already exists  ${metadata}`,
+    );
     continue;
   }
 
@@ -120,10 +190,12 @@ for (const token of TOKENS) {
       { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
       { address: RENT_SYSVAR, role: AccountRole.READONLY },
     ],
-    data: concat([SET_METADATA_DISC, str(token.name), str(token.symbol), str(token.uri)]),
+    data: encodeMetadata(token),
   };
 
-  const { value: blockhash } = await rpc.getLatestBlockhash().send();
+  const { value: blockhash } = await rpcRetry(() =>
+    rpc.getLatestBlockhash().send(),
+  );
   const message = pipe(
     createTransactionMessage({ version: 0 }),
     (m) => setTransactionMessageFeePayerSigner(signer, m),
@@ -132,10 +204,19 @@ for (const token of TOKENS) {
     (m) => addSignersToTransactionMessage([signer], m),
   );
   const signed = await signTransactionMessageWithSigners(message);
-  await sendAndConfirm(signed, { commitment: "confirmed" });
+  const sig = getSignatureFromTransaction(signed);
+  await rpcRetry(() =>
+    rpc
+      .sendTransaction(getBase64EncodedWireTransaction(signed), {
+        encoding: "base64",
+        preflightCommitment: "confirmed",
+      })
+      .send(),
+  );
+  await confirm(sig);
 
   console.log(`${token.ticker.padEnd(8)} metadata created`);
   console.log(`  mint     ${mint}`);
   console.log(`  metadata ${metadata}`);
-  console.log(`  tx       ${getSignatureFromTransaction(signed)}\n`);
+  console.log(`  tx       ${sig}\n`);
 }

@@ -56,7 +56,7 @@ pub fn require_writable(a: &AccountView) -> Result<(), VaultError> {
     if a.is_writable() {
         Ok(())
     } else {
-        Err(VaultError::InvalidAccountOwner)
+        Err(VaultError::NotWritable)
     }
 }
 
@@ -99,6 +99,10 @@ pub fn require_program(a: &AccountView, id: &Address) -> Result<(), VaultError> 
 #[inline]
 pub fn require_uninitialized(a: &AccountView) -> Result<(), VaultError> {
     if !a.is_data_empty() {
+        // Already has data, so it exists. `AccountAlreadyExists` would be the
+        // honest name; `InvalidAccountOwner` is kept because the frontend's
+        // error table already maps it and the practical cause is the same —
+        // this address is not a fresh account.
         return Err(VaultError::InvalidAccountOwner);
     }
     require_owned_by(a, &SYSTEM_PROGRAM_ID)

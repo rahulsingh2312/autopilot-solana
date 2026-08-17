@@ -1,9 +1,9 @@
 {
   "name": "Buffett Tracker",
   "symbol": "bwSOL",
-  "description": "He handed Greg Abel the keys. The 13F still prints every quarter. Deposit SOL to mint bwSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and bwSOL holdings update when it changes. Holdings: AAPL, AXP, KO, BAC, CVX, GOOGL. Solana devnet deployment by Autopilot. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://autopilot-solana.vercel.app/tokens/bwsol.png",
-  "external_url": "https://autopilot-solana.vercel.app",
+  "description": "He handed Greg Abel the keys. The 13F still prints every quarter. Deposit SOL to mint bwSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and bwSOL holdings update when it changes. Holdings: AAPL, AXP, KO, BAC, CVX, GOOGL. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://sol.copycat.my/tokens/bwsol.png",
+  "external_url": "https://sol.copycat.my",
   "attributes": [
     {
       "trait_type": "Tracks",
