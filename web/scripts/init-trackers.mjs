@@ -71,10 +71,12 @@ const ZERO_ADDRESS = "11111111111111111111111111111111";
 
 const IX_INITIALIZE_TRACKER = 0;
 const IX_REBALANCE = 4;
+const IX_CLOSE_TRACKER = 13;
 const STRATEGY_SPOT_BASKET = 0;
 
 /** Offsets into a `Tracker`, mirroring `state::tracker`. */
 const T_LEG_COUNT = 8;
+const T_SHARE_MINT = 86;
 const T_LEGS = 170;
 const LEG_SIZE = 66;
 const LEG_WEIGHT_BPS = 32;
@@ -121,8 +123,31 @@ const REDEEM_FEE_PPM = 2500;
  */
 const TRACKERS = CONFIG_TRACKERS.map((t) => ({
   ticker: t.ticker,
+  shareMint: t.shareMint,
   legs: t.legs.map((l) => l.weightBps),
 }));
+
+/**
+ * The vanity mint keypairs, gitignored under `.keys/warh/`.
+ *
+ * The share mint is caller-supplied rather than derived, so creating a tracker
+ * needs its private key to co-sign. Losing these before launch means regrinding
+ * and editing config; losing them after costs nothing, because the mint
+ * authority is the tracker PDA and these keys sign exactly once.
+ */
+const KEY_DIR = process.env.MINT_KEY_DIR ?? join(homedir(), "autopilot-solana/.keys/warh");
+
+async function loadMintSigner(ticker, expected) {
+  const path = join(KEY_DIR, `${ticker}.json`);
+  const secret = JSON.parse(await readFile(path, "utf8"));
+  const kp = await createKeyPairSignerFromBytes(new Uint8Array(secret));
+  if (kp.address !== expected) {
+    throw new Error(
+      `${ticker}: ${path} is ${kp.address}, config says ${expected}`,
+    );
+  }
+  return kp;
+}
 
 for (const t of TRACKERS) {
   const sum = t.legs.reduce((a, b) => a + b, 0);
@@ -202,6 +227,28 @@ function readOnChainWeights(base64) {
   return out;
 }
 
+/** The mint this tracker was created with, as base58. */
+function readOnChainMint(base64) {
+  const d = Buffer.from(base64, "base64");
+  return bs58(d.subarray(T_SHARE_MINT, T_SHARE_MINT + 32));
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function bs58(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let out = "";
+  while (n > 0n) {
+    out = B58[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b === 0) out = "1" + out;
+    else break;
+  }
+  return out;
+}
+
 function encodeRebalanceData(legs) {
   const zeroMint = new Uint8Array(addrEnc.encode(ZERO_ADDRESS));
   return concat([
@@ -237,7 +284,7 @@ async function rpcRetry(fn, attempts = 8) {
 }
 
 /** Build, sign, send and confirm a single-instruction transaction. */
-async function sendIx(signer, rpc, instruction, confirm) {
+async function sendIx(signer, rpc, instruction, confirm, extraSigners = []) {
   const { value: blockhash } = await rpcRetry(() =>
     rpc.getLatestBlockhash().send(),
   );
@@ -246,7 +293,7 @@ async function sendIx(signer, rpc, instruction, confirm) {
     (m) => setTransactionMessageFeePayerSigner(signer, m),
     (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
     (m) => appendTransactionMessageInstructions([instruction], m),
-    (m) => addSignersToTransactionMessage([signer], m),
+    (m) => addSignersToTransactionMessage([signer, ...extraSigners], m),
   );
   const signed = await signTransactionMessageWithSigners(message);
   const sig = getSignatureFromTransaction(signed);
@@ -305,6 +352,7 @@ async function main() {
   let created = 0;
   let reconciled = 0;
   let skipped = 0;
+  let migrated = 0;
   for (const tracker of TRACKERS) {
     const trackerPda = await pda([
       utf8.encode("tracker"),
@@ -312,7 +360,9 @@ async function main() {
     ]);
     const trackerSeed = new Uint8Array(addrEnc.encode(trackerPda));
     const vaultPda = await pda([utf8.encode("vault"), trackerSeed]);
-    const mintPda = await pda([utf8.encode("share"), trackerSeed]);
+    // Not derived any more — a ground keypair whose address starts with `warh`.
+    const mintSigner = await loadMintSigner(tracker.ticker, tracker.shareMint);
+    const mintPda = mintSigner.address;
 
     if (tracker.legs.length > MAX_LEGS_PER_TX) {
       console.log(
@@ -326,6 +376,53 @@ async function main() {
       rpc.getAccountInfo(trackerPda, { encoding: "base64" }).send(),
     );
     if (existing) {
+      // A tracker created before the mint became caller-supplied carries a
+      // derived PDA mint. Retire and re-create it so the token gets its vanity
+      // address — but only when nobody holds shares, because closing a tracker
+      // with holders is not the authority's to do and the program refuses.
+      const currentMint = readOnChainMint(existing.data[0]);
+      if (currentMint !== tracker.shareMint) {
+        let supply = "0";
+        try {
+          supply = (
+            await rpcRetry(() =>
+              rpc.getTokenSupply(currentMint, { commitment: "confirmed" }).send(),
+            )
+          ).value.amount;
+        } catch {
+          /* mint may not exist */
+        }
+        if (supply !== "0") {
+          console.log(
+            `${tracker.ticker.padEnd(8)} SKIPPED           holds ${supply} shares; ` +
+              `redeem them before the mint can be changed`,
+          );
+          skipped += 1;
+          continue;
+        }
+        console.log(
+          `${tracker.ticker.padEnd(8)} migrating mint    ${currentMint.slice(0, 8)}… -> ${tracker.shareMint.slice(0, 8)}…`,
+        );
+        await sendIx(
+          signer,
+          rpc,
+          {
+            programAddress: PROGRAM_ID,
+            accounts: [
+              { address: signer.address, role: AccountRole.READONLY_SIGNER },
+              { address: signer.address, role: AccountRole.WRITABLE },
+              { address: trackerPda, role: AccountRole.WRITABLE },
+              { address: currentMint, role: AccountRole.READONLY },
+              { address: vaultPda, role: AccountRole.WRITABLE },
+              { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
+            ],
+            data: new Uint8Array([IX_CLOSE_TRACKER]),
+          },
+          confirm,
+        );
+        migrated += 1;
+        // Fall through to creation below with the vanity mint.
+      } else {
       const onChain = readOnChainWeights(existing.data[0]);
       const matches =
         onChain.length === tracker.legs.length &&
@@ -353,6 +450,7 @@ async function main() {
       );
       reconciled += 1;
       continue;
+      }
     }
 
     const instruction = {
@@ -361,7 +459,8 @@ async function main() {
         { address: signer.address, role: AccountRole.WRITABLE_SIGNER },
         { address: signer.address, role: AccountRole.READONLY }, // fee_recipient
         { address: trackerPda, role: AccountRole.WRITABLE },
-        { address: mintPda, role: AccountRole.WRITABLE },
+        // The mint signs for its own creation.
+        { address: mintPda, role: AccountRole.WRITABLE_SIGNER },
         { address: vaultPda, role: AccountRole.WRITABLE },
         // The port declares system before token, and reads rent from a
         // compiled-in constant rather than taking the sysvar.
@@ -371,7 +470,7 @@ async function main() {
       data: encodeInitializeData(tracker),
     };
 
-    const sig = await sendIx(signer, rpc, instruction, confirm);
+    const sig = await sendIx(signer, rpc, instruction, confirm, [mintSigner]);
     created += 1;
 
     console.log(`${tracker.ticker.padEnd(8)} initialized  ${tracker.legs.length} legs`);
@@ -385,7 +484,7 @@ async function main() {
     rpc.getBalance(signer.address).send(),
   );
   console.log(
-    `${created} created, ${reconciled} rebalanced, ${skipped} skipped; ` +
+    `${created} created, ${migrated} mint-migrated, ${reconciled} rebalanced, ${skipped} skipped; ` +
       `${Number(balance - after) / 1e9} SOL spent, ${Number(after) / 1e9} SOL left`,
   );
 }

@@ -100,13 +100,40 @@ export type TrackerConfig = {
   rebalance: string;
   filingDelay: string;
   legs: Leg[];
+  /**
+   * The share token's mint address.
+   *
+   * A ground vanity keypair rather than a PDA, so every tracker's token starts
+   * with `warh`. The program takes it as a caller-supplied signer at
+   * initialization and sets its authority to the tracker PDA, so only the
+   * program can ever mint a share — the address is chosen, the control is not.
+   *
+   * It has to live here because it cannot be derived: the frontend needs it
+   * before it can fetch anything, and the private keys are gitignored under
+   * `.keys/`.
+   */
+  shareMint: string;
   /** Shown verbatim on the card. The uncomfortable fact, stated first. */
   caveat: string;
 };
 
+/**
+ * The share mint for a ticker.
+ *
+ * Throws rather than returning undefined: a missing mint means the frontend
+ * would silently read the wrong account, and NAV rendered from the wrong mint
+ * is worse than a page that fails to load.
+ */
+export function shareMintOf(ticker: string): string {
+  const t = TRACKERS.find((x) => x.ticker === ticker);
+  if (!t) throw new Error(`unknown tracker: ${ticker}`);
+  return t.shareMint;
+}
+
 export const TRACKERS: TrackerConfig[] = [
   {
     ticker: "icSOL",
+    shareMint: "warh49ZKqNfMex3Eza3kpoBQEbvpCn3HfVAagdQJJwL",
     name: "Inverse Cramer Index",
     status: "live",
     accent: "#35D07F",
@@ -136,6 +163,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "pltSOL",
+    shareMint: "warhA5YS2HixSryJ91wiu6JunuwLqujS4qh9WYdDsix",
     name: "Pelosi Tracker",
     status: "live",
     accent: "#2F6FED",
@@ -168,6 +196,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "cgSOL",
+    shareMint: "warhL13YoBGLxkbJuQGvB1snMvjwrzXEaBYyuRmYmFZ",
     name: "Congress Tracker",
     status: "live",
     accent: "#7B8CFF",
@@ -207,6 +236,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "bwSOL",
+    shareMint: "warhMQqNcD52U8VbeezCnDHpBAqnksT14MYMQxCWZNk",
     name: "Buffett Tracker",
     status: "live",
     accent: "#C98A1B",
@@ -243,6 +273,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "psqSOL",
+    shareMint: "warhNKRiQiV76jxKT8z1MPo7gsE1usmF8TJQ3eNzNCW",
     name: "Ackman Tracker",
     status: "live",
     accent: "#0FA3A3",
@@ -278,6 +309,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "mg7SOL",
+    shareMint: "warhSBcb8XpCxz6KGFx9JsFbYxzLPF7BKwUYDJgRzKC",
     name: "Magnificent Seven",
     status: "live",
     accent: "#E8833A",
@@ -310,6 +342,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "aiSOL",
+    shareMint: "warhdDBRacMwAzP8vDdxR9vc7LiReWiiZUSufWNYwQd",
     name: "AI Infrastructure",
     status: "live",
     accent: "#A855F7",
@@ -349,6 +382,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "rdSOL",
+    shareMint: "warhjn8TtHSQPPsc7gfG83mmw5xuhikwzmBMgxyjxhb",
     name: "Bridgewater Tracker",
     status: "live",
     accent: "#C2415C",
@@ -385,6 +419,7 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "dtSOL",
+    shareMint: "warhm4rS7QtMTBWxPDhacXADn7aVQbDvG99ua1Vyjjs",
     name: "Tepper Tracker",
     status: "live",
     accent: "#3F8F5B",

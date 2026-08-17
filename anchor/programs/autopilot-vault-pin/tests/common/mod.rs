@@ -177,6 +177,13 @@ pub struct Harness {
     pub program_id: Address,
     pub payer: Keypair,
     pub fee_recipient: Address,
+    /// The share mint keypair, for the port only.
+    ///
+    /// Anchor derives its mint from `["share", tracker]`; the port takes a
+    /// caller-supplied keypair so the address can be a vanity one. That is an
+    /// intended divergence, so `Observed` compares mint *supply* rather than
+    /// mint address — the address is exactly the thing that is meant to differ.
+    pub share_mint_kp: Keypair,
 }
 
 impl Harness {
@@ -202,6 +209,7 @@ impl Harness {
             program_id,
             payer,
             fee_recipient,
+            share_mint_kp: Keypair::new(),
         }
     }
 
@@ -211,8 +219,17 @@ impl Harness {
         Address::find_program_address(&[TRACKER_SEED, ticker.as_bytes()], &self.program_id)
     }
 
-    pub fn share_pda(&self, tracker: &Address) -> (Address, u8) {
-        Address::find_program_address(&[SHARE_SEED, tracker.as_ref()], &self.program_id)
+    /// Where this flavor's share mint lives.
+    ///
+    /// Anchor: a PDA. The port: the caller's keypair. Callers ask the harness
+    /// rather than deriving, so a scenario reads the same for both.
+    pub fn share_mint(&self, tracker: &Address) -> Address {
+        match self.flavor {
+            Flavor::Anchor => {
+                Address::find_program_address(&[SHARE_SEED, tracker.as_ref()], &self.program_id).0
+            }
+            Flavor::Pin => self.share_mint_kp.pubkey(),
+        }
     }
 
     pub fn vault_pda(&self, tracker: &Address) -> (Address, u8) {
@@ -272,6 +289,30 @@ impl Harness {
                 self.flavor,
                 err.meta.logs.join("\n")
             ),
+        }
+    }
+
+    /// Send an `initialize_tracker`, signing correctly for this flavor.
+    ///
+    /// The port's share mint is a caller keypair and must co-sign; Anchor's is
+    /// a PDA and must *not* be passed, or `Transaction::sign` rejects a keypair
+    /// with no matching signer slot. Kept here so no scenario has to remember.
+    pub fn send_init(&mut self, ix: Instruction) {
+        let payer = self.payer.insecure_clone();
+        let mint = self.share_mint_kp.insecure_clone();
+        match self.flavor {
+            Flavor::Anchor => self.send_ok(ix, &[&payer]),
+            Flavor::Pin => self.send_ok(ix, &[&payer, &mint]),
+        }
+    }
+
+    /// The same, for a call expected to be rejected.
+    pub fn send_init_err(&mut self, ix: Instruction) -> u32 {
+        let payer = self.payer.insecure_clone();
+        let mint = self.share_mint_kp.insecure_clone();
+        match self.flavor {
+            Flavor::Anchor => self.send_err_code(ix, &[&payer]),
+            Flavor::Pin => self.send_err_code(ix, &[&payer, &mint]),
         }
     }
 
@@ -336,7 +377,7 @@ impl Harness {
     /// return only the fields both layouts define.
     pub fn observe(&self, ticker: &str, holder: &Address) -> Observed {
         let (tracker, _) = self.tracker_pda(ticker);
-        let (share_mint, _) = self.share_pda(&tracker);
+        let share_mint = self.share_mint(&tracker);
         let (vault, _) = self.vault_pda(&tracker);
 
         let data = self
@@ -510,7 +551,7 @@ impl Harness {
         max_legs: u8,
     ) -> Instruction {
         let (tracker, _) = self.tracker_pda(ticker);
-        let (share_mint, _) = self.share_pda(&tracker);
+        let share_mint = self.share_mint(&tracker);
         let (vault, _) = self.vault_pda(&tracker);
 
         // The tail differs: Anchor declares `token_program, system_program,
@@ -521,7 +562,8 @@ impl Harness {
             AccountMeta::new(self.payer.pubkey(), true),
             AccountMeta::new_readonly(self.fee_recipient, false),
             AccountMeta::new(tracker, false),
-            AccountMeta::new(share_mint, false),
+            // The port's mint signs for its own creation; Anchor's is a PDA.
+            AccountMeta::new(share_mint, self.flavor == Flavor::Pin),
             AccountMeta::new(vault, false),
         ];
         match self.flavor {
@@ -589,7 +631,7 @@ impl Harness {
     /// a comparison of deposit behaviour rather than of ATA creation.
     pub fn create_share_ata(&mut self, owner: &Address, ticker: &str) -> Address {
         let (tracker, _) = self.tracker_pda(ticker);
-        let (share_mint, _) = self.share_pda(&tracker);
+        let share_mint = self.share_mint(&tracker);
         let ata = self.ata(owner, &share_mint);
 
         // AssociatedTokenAccount::Create — discriminator 0, accounts:
@@ -624,7 +666,7 @@ impl Harness {
         min_shares_out: u64,
     ) -> Instruction {
         let (tracker, _) = self.tracker_pda(ticker);
-        let (share_mint, _) = self.share_pda(&tracker);
+        let share_mint = self.share_mint(&tracker);
         let (vault, _) = self.vault_pda(&tracker);
         let shares = self.ata(depositor, &share_mint);
 
@@ -684,7 +726,7 @@ impl Harness {
         min_lamports_out: u64,
     ) -> Instruction {
         let (tracker, _) = self.tracker_pda(ticker);
-        let (share_mint, _) = self.share_pda(&tracker);
+        let share_mint = self.share_mint(&tracker);
         let (vault, _) = self.vault_pda(&tracker);
         let shares = self.ata(holder, &share_mint);
 

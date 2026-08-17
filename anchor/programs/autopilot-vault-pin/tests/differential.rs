@@ -58,7 +58,7 @@ fn ready(flavor: Flavor, fees: (u16, u16)) -> (Harness, Address) {
     let mut h = Harness::new(flavor);
     let payer = h.payer.insecure_clone();
     let ix = h.initialize_tracker_ix("bwSOL", &legs, fees.0, fees.1, 16);
-    h.send_ok(ix, &[&payer]);
+    h.send_init(ix);
     let depositor = payer.pubkey();
     h.create_share_ata(&depositor, "bwSOL");
     (h, depositor)
@@ -71,7 +71,7 @@ fn init_on(flavor: Flavor, ticker: &str, legs: &[Leg], fees: (u16, u16)) -> (Har
     let mut h = Harness::new(flavor);
     let payer = h.payer.insecure_clone();
     let ix = h.initialize_tracker_ix(ticker, legs, fees.0, fees.1, 16);
-    h.send_ok(ix, &[&payer]);
+    h.send_init(ix);
     let observed = h.observe(ticker, &payer.pubkey());
     (h, observed)
 }
@@ -131,11 +131,10 @@ fn both_programs_refuse_a_fee_above_the_cap() {
     let legs = mag7();
     for flavor in Flavor::BOTH {
         let mut h = Harness::new(flavor);
-        let payer = h.payer.insecure_clone();
         // MAX_FEE_PPM is 30_000 (3%).
         let ix = h.initialize_tracker_ix("mg7SOL", &legs, 30_001, 10, 16);
         assert_eq!(
-            h.send_err_code(ix, &[&payer]),
+            h.send_init_err(ix),
             6007,
             "{flavor:?}: expected FeeTooHigh"
         );
@@ -149,7 +148,6 @@ fn both_programs_refuse_a_fee_above_the_cap() {
 fn both_programs_refuse_a_basket_that_does_not_sum_to_one_hundred_percent() {
     for flavor in Flavor::BOTH {
         let mut h = Harness::new(flavor);
-        let payer = h.payer.insecure_clone();
         let legs = vec![
             Leg {
                 mint: Address::new_unique(),
@@ -166,7 +164,7 @@ fn both_programs_refuse_a_basket_that_does_not_sum_to_one_hundred_percent() {
         ];
         let ix = h.initialize_tracker_ix("mg7SOL", &legs, 2_500, 2_500, 16);
         assert_eq!(
-            h.send_err_code(ix, &[&payer]),
+            h.send_init_err(ix),
             6001,
             "{flavor:?}: expected WeightsNotOneHundredPercent"
         );
@@ -200,12 +198,12 @@ fn a_prefunded_address_can_still_be_initialized_on_both_programs() {
 
         // A griefer sends dust to the address before anyone creates it.
         let (tracker, _) = h.tracker_pda("mg7SOL");
-        let (share_mint, _) = h.share_pda(&tracker);
+        let share_mint = h.share_mint(&tracker);
         h.svm.airdrop(&tracker, 1).unwrap();
         h.svm.airdrop(&share_mint, 1).unwrap();
 
         let ix = h.initialize_tracker_ix("mg7SOL", &legs, 2_500, 2_500, 16);
-        h.send_ok(ix, &[&payer]);
+        h.send_init(ix);
 
         let o = h.observe("mg7SOL", &payer.pubkey());
         assert_eq!(o.leg_count, 7, "{flavor:?}: basket written");
@@ -225,7 +223,7 @@ fn prefunded_dust_lands_identically_on_both_programs() {
         let (tracker, _) = h.tracker_pda("mg7SOL");
         h.svm.airdrop(&tracker, 1).unwrap();
         let ix = h.initialize_tracker_ix("mg7SOL", &legs, 2_500, 2_500, 16);
-        h.send_ok(ix, &[&payer]);
+        h.send_init(ix);
         observed.push(h.observe("mg7SOL", &payer.pubkey()));
     }
     assert_same(&observed[0], &observed[1], "initialize_tracker (prefunded)");
@@ -238,11 +236,10 @@ fn a_ticker_cannot_be_initialized_twice_on_either_program() {
     let legs = mag7();
     for flavor in Flavor::BOTH {
         let (mut h, _) = init_on(flavor, "mg7SOL", &legs, (2_500, 2_500));
-        let payer = h.payer.insecure_clone();
         h.svm.expire_blockhash();
         let ix = h.initialize_tracker_ix("mg7SOL", &legs, 2_500, 2_500, 16);
         assert!(
-            h.send(ix, &[&payer]).is_err(),
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| h.send_init(ix))).is_err(),
             "{flavor:?}: re-initialization must fail"
         );
     }

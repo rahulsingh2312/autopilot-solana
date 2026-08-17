@@ -6,12 +6,12 @@ import { useClient } from "@solana/react";
 import useSWR from "swr";
 
 import type { AppClient } from "@/app/providers";
+import { shareMintOf } from "@/lib/config";
 import {
   decodeMintSupply,
   decodeTokenAmount,
   decodeTracker,
   findAssociatedTokenPda,
-  findShareMintPda,
   findTrackerPda,
   findVaultPda,
   type TrackerAccount,
@@ -48,10 +48,12 @@ export function useVault(ticker: string, refreshMs = 10_000) {
 
   const fetcher = useCallback(async (): Promise<VaultSnapshot> => {
     const trackerAddress = await findTrackerPda(ticker);
-    const [vaultAddress, shareMintAddress] = await Promise.all([
-      findVaultPda(trackerAddress),
-      findShareMintPda(trackerAddress),
-    ]);
+    const vaultAddress = await findVaultPda(trackerAddress);
+    // The share mint is a vanity keypair, not a PDA, so it cannot be derived —
+    // it comes from config. That is the cost of a chosen address, and it has to
+    // be known *before* the fetch below rather than read out of the tracker
+    // account, or the single-round-trip guarantee above is lost.
+    const shareMintAddress = shareMintOf(ticker) as Address;
 
     const { value } = await client.rpc
       .getMultipleAccounts([trackerAddress, shareMintAddress, vaultAddress], {

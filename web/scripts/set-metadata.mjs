@@ -75,6 +75,9 @@ const TOKENS = (await import("../src/lib/config.ts")).TRACKERS.map((t) => ({
   ticker: t.ticker,
   name: t.name,
   symbol: t.ticker,
+  // Not derived: the mint is a ground vanity keypair, so its address comes
+  // from config alongside everything else about the tracker.
+  shareMint: t.shareMint,
   uri: `${SITE}/tokens/${t.ticker.toLowerCase()}.json`,
 }));
 
@@ -96,6 +99,22 @@ async function rpcRetry(fn, attempts = 8) {
       await sleep(after > 0 ? after * 1000 : 2000 * (i + 1));
     }
   }
+}
+
+const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function bs58(bytes) {
+  let n = 0n;
+  for (const b of bytes) n = n * 256n + BigInt(b);
+  let out = "";
+  while (n > 0n) {
+    out = B58[Number(n % 58n)] + out;
+    n /= 58n;
+  }
+  for (const b of bytes) {
+    if (b === 0) out = "1" + out;
+    else break;
+  }
+  return out;
 }
 
 const utf8 = new TextEncoder();
@@ -169,10 +188,29 @@ for (const token of TOKENS) {
     utf8.encode("tracker"),
     utf8.encode(token.ticker),
   ]);
-  const mint = await pda(PROGRAM_ID, [
-    utf8.encode("share"),
-    new Uint8Array(addrEnc.encode(tracker)),
-  ]);
+  const mint = token.shareMint;
+
+  // The program refuses metadata for a mint the tracker does not record
+  // (SeedsMismatch, 6041). That happens when config has been moved to a vanity
+  // mint but the tracker still holds its old one because shares are
+  // outstanding and it could not be re-created. Report it rather than failing.
+  const { value: trackerAcct } = await rpcRetry(() =>
+    rpc.getAccountInfo(tracker, { encoding: "base64" }).send(),
+  );
+  if (!trackerAcct) {
+    console.log(`${token.ticker.padEnd(8)} no tracker on chain`);
+    continue;
+  }
+  const recorded = bs58(
+    Buffer.from(trackerAcct.data[0], "base64").subarray(86, 86 + 32),
+  );
+  if (recorded !== mint) {
+    console.log(
+      `${token.ticker.padEnd(8)} SKIPPED  tracker records ${recorded.slice(0, 8)}…, ` +
+        `config says ${mint.slice(0, 8)}… — redeem and re-create it first`,
+    );
+    continue;
+  }
   const metadata = await pda(METADATA_PROGRAM, [
     utf8.encode("metadata"),
     new Uint8Array(addrEnc.encode(METADATA_PROGRAM)),

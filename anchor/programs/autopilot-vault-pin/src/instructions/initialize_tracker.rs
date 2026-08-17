@@ -8,6 +8,21 @@
 //!   the Metaplex metadata account.
 //! - **`max_legs` is a new argument.** The account is sized for it once and
 //!   never reallocated.
+//! - **The share mint is caller-supplied, not a PDA.** It used to derive from
+//!   `["share", tracker]`, which fixed its address and made a vanity mint
+//!   impossible. Now the caller passes a keypair they generated, co-signs with
+//!   it, and this creates the account at that address.
+//!
+//!   What does *not* change is the part that matters: `InitializeMint2` sets
+//!   the mint authority to the tracker PDA, so only this program can ever mint
+//!   a share, and `require_uninitialized` still refuses anything that already
+//!   exists — so a caller cannot smuggle in someone else's live mint.
+//!
+//!   Two consequences. The frontend can no longer *derive* the address and has
+//!   to carry it in config. And retiring a ticker stops being permanent: with
+//!   a PDA mint, `close_tracker` left the mint behind at a fixed address and
+//!   re-initializing that ticker failed forever on `require_uninitialized`. A
+//!   fresh keypair is always uninitialized, so a closed ticker can be reused.
 //! - **The payer becomes both `authority` and `manager`.** Splitting them is a
 //!   separate `set_manager` call, so a creator flow can hand the manager role
 //!   to a stranger without ever handing over the authority.
@@ -111,7 +126,7 @@ impl<'a> Args<'a> {
 /// 0 payer           signer, writable — funds every account, becomes authority + manager
 /// 1 fee_recipient   readonly        — stored only; never read or written here
 /// 2 tracker         writable        — PDA ["tracker", ticker], created
-/// 3 share_mint      writable        — PDA ["share", tracker], created
+/// 3 share_mint      writable, SIGNER — caller's keypair, created here
 /// 4 vault           writable        — PDA ["vault", tracker], funded to rent exemption
 /// 5 system_program
 /// 6 token_program
@@ -160,6 +175,9 @@ pub fn handle(
 
     // All three are about to be created or funded, so none may already exist.
     require_uninitialized(tracker_ai)?;
+    // The mint is a plain account the caller generated, so it signs for its own
+    // creation rather than being derived. Still must not already exist.
+    require_signer(share_mint_ai)?;
     require_uninitialized(share_mint_ai)?;
 
     // Canonical bumps, found rather than accepted from the caller: a
@@ -168,10 +186,6 @@ pub fn handle(
     let (tracker_key, tracker_bump) =
         canonical_pda(&[TRACKER_SEED, args.ticker], program_id);
     require_address(tracker_ai, &tracker_key)?;
-
-    let (mint_key, mint_bump) =
-        canonical_pda(&[SHARE_SEED, tracker_key.as_ref()], program_id);
-    require_address(share_mint_ai, &mint_key)?;
 
     let (vault_key, vault_bump) =
         canonical_pda(&[VAULT_SEED, tracker_key.as_ref()], program_id);
@@ -202,21 +216,17 @@ pub fn handle(
     )?;
 
     // ---- create and initialize the share mint ----
+    //
+    // No seed signing: the mint keypair signed the transaction, so it authorizes
+    // its own creation. Empty signer slice, same helper — which also means a
+    // vanity address someone prefunded is adopted rather than rejected.
     let mint_space = pinocchio_token::state::Mint::LEN;
-    let mint_bump_seed = [mint_bump];
-    let tracker_key_bytes = tracker_key.to_bytes();
-    let mint_seeds = [
-        Seed::from(SHARE_SEED),
-        Seed::from(&tracker_key_bytes[..]),
-        Seed::from(&mint_bump_seed[..]),
-    ];
-
     create_pda_account(
         payer,
         share_mint_ai,
         mint_space as u64,
         &TOKEN_PROGRAM_ID,
-        &[Signer::from(&mint_seeds)],
+        &[],
     )?;
 
     // Mint authority is the tracker PDA, so only this program can change the
@@ -252,14 +262,17 @@ pub fn handle(
         args.ticker,
         tracker_bump,
         vault_bump,
-        mint_bump,
+        // No bump: the mint is not a PDA any more. The byte stays in the layout
+        // rather than being removed, because removing it shifts every field
+        // after it in a header that `header_layout_is_frozen` pins.
+        0,
     )?;
 
     // The payer holds both roles at creation. `set_manager` is what hands the
     // basket to someone else while the vault stays with us.
     tracker.set_authority(&payer_key);
     tracker.set_manager(&payer_key);
-    tracker.set_share_mint(&mint_key.to_bytes());
+    tracker.set_share_mint(&share_mint_ai.address().to_bytes());
     tracker.set_fee_recipient(&fee_recipient_key);
     tracker.set_rent_reserve(rent_reserve);
     tracker.set_fees(args.deposit_fee_ppm, args.redeem_fee_ppm)?;

@@ -15,3 +15,8 @@ anchor/.surfpool/
 backend/data/
 backend/node_modules/
 backend/.env
+
+# Vanity mint keypairs. These are the authority-less mint addresses for the
+# share tokens; losing them before launch means regrinding, and committing them
+# means anyone can front-run creating the tracker at that address.
+.keys/

@@ -96,13 +96,12 @@ export async function findVaultPda(tracker: Address) {
   return address;
 }
 
-export async function findShareMintPda(tracker: Address) {
-  const [address] = await getProgramDerivedAddress({
-    programAddress: VAULT_PROGRAM_ADDRESS,
-    seeds: [utf8.encode("share"), getAddressEncoder().encode(tracker)],
-  });
-  return address;
-}
+// `findShareMintPda` is gone. The share mint is no longer derived: it is a
+// ground vanity keypair supplied to `initialize_tracker`, so the address is
+// chosen rather than computed. Read it from `config.ts` via `shareMintOf`.
+//
+// What did not change is who controls it — `InitializeMint2` still sets the
+// mint authority to the tracker PDA, so only the program can mint a share.
 
 export async function findAssociatedTokenPda(owner: Address, mint: Address) {
   const encoder = getAddressEncoder();
