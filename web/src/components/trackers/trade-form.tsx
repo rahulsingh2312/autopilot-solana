@@ -17,6 +17,7 @@ import {
 import { findAssociatedTokenPda } from "@/lib/vault/program";
 import {
   explainTransactionError,
+  getCreateAssociatedTokenIdempotentInstruction,
   getDepositInstruction,
   getRedeemForSolInstruction,
 } from "@/lib/vault/instructions";
@@ -119,6 +120,18 @@ export function TradeForm({
       snapshot.shareMintAddress,
     );
 
+    // The share account has to exist before a deposit can mint into it.
+    //
+    // The Anchor program created it inline with `init_if_needed`; the Pinocchio
+    // program deliberately does not, because that constraint drags in the
+    // associated-token program and an instruction class with a known
+    // reinitialization footgun. So the caller creates it — idempotently, so a
+    // returning depositor pays nothing and there is no round trip to check
+    // first, and no race between checking and sending.
+    //
+    // Without this the deposit fails account validation with
+    // InvalidAccountOwner: an account that does not exist is system-owned, so
+    // it is not a token account.
     const instruction =
       mode === "buy"
         ? getDepositInstruction({
@@ -142,7 +155,20 @@ export function TradeForm({
             minLamportsOut: quote.minOut,
           });
 
-    const result = await client.sendTransaction([instruction], {
+    const instructions =
+      mode === "buy"
+        ? [
+            getCreateAssociatedTokenIdempotentInstruction({
+              payer: owner,
+              owner,
+              mint: snapshot.shareMintAddress,
+              ata: holderShares,
+            }),
+            instruction,
+          ]
+        : [instruction];
+
+    const result = await client.sendTransaction(instructions, {
       abortSignal: signal,
     });
 
