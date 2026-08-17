@@ -49,16 +49,35 @@ function Holdings({ ticker }: { ticker: string }) {
 
   const held = (snapshot?.holdings ?? []).filter((h) => h.balance > 0n);
   if (!snapshot?.tracker) return <span className="text-faint">n/a</span>;
+  // Uninvested is a state worth showing as a mark rather than a caveat: the
+  // vault genuinely holds SOL, it just holds only SOL.
   if (held.length === 0) {
     return (
-      <span className="num text-[0.6875rem] text-faint" title="Deposits have not been converted into the basket yet">
-        SOL only
+      <span
+        className="flex items-center gap-1.5"
+        title="Deposits have not been converted into the basket yet — the vault holds only SOL"
+      >
+        <SolMark />
+        <span className="num text-[0.6875rem] text-faint">only</span>
       </span>
     );
   }
 
   return (
     <span className="flex items-center gap-1">
+      {/* The sleeve rides with the legs when it is more than rounding: a fund
+          that is a third cash is not the same object as one fully invested,
+          and the marks should not imply otherwise. */}
+      {snapshot.sleeveLamports > 0n &&
+      snapshot.netAssets > 0n &&
+      (snapshot.sleeveLamports * 100n) / snapshot.netAssets >= 5n ? (
+        <span
+          className="mr-0.5"
+          title={`${((Number(snapshot.sleeveLamports) * 100) / Number(snapshot.netAssets)).toFixed(1)}% still in SOL`}
+        >
+          <SolMark />
+        </span>
+      ) : null}
       {held.map((h) => {
         // The basket is ordered, so index maps straight back to the leg the
         // config names — no matching on mint, which repeats across trackers.
@@ -71,11 +90,11 @@ function Holdings({ ticker }: { ticker: string }) {
               h.actualBps !== null ? (h.actualBps / 100).toFixed(1) : "?"
             }% of the vault`}
           >
-            <TokenMark
-              symbol={symbol}
-              asset={leg?.xstock ? assets[leg.xstock] : undefined}
-              size={18}
-            />
+            {/* Keyed by the *underlying* symbol, not the xStock ticker: the
+                directory indexes MCD, not MCDx. Looking up the ticker misses
+                every time and silently falls back to initials, which is what
+                "MC KO PE XO" was. */}
+            <TokenMark symbol={symbol} asset={assets[symbol]} size={18} />
           </span>
         );
       })}
