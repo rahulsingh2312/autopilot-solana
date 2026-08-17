@@ -163,7 +163,15 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "pltSOL",
-    shareMint: "warhA5YS2HixSryJ91wiu6JunuwLqujS4qh9WYdDsix",
+    // Still the derived mint this tracker was created with. It has shares
+    // outstanding, so `close_tracker` refuses and the mint cannot be
+    // swapped. The ground vanity address warhA5YS2Hix…
+    // is reserved for it; redeem, re-run init-trackers.mjs, then update.
+    //
+    // This has to match what the tracker records or the site derives a share
+    // account that does not exist, and a holder cannot see — let alone
+    // redeem — what they own.
+    shareMint: "A5AqDr5kxWvingmybQASTgHnQgjWVWyj2mLDPYQR9D6R",
     name: "Pelosi Tracker",
     status: "live",
     accent: "#2F6FED",
@@ -342,7 +350,15 @@ export const TRACKERS: TrackerConfig[] = [
   },
   {
     ticker: "aiSOL",
-    shareMint: "warhdDBRacMwAzP8vDdxR9vc7LiReWiiZUSufWNYwQd",
+    // Still the derived mint this tracker was created with. It has shares
+    // outstanding, so `close_tracker` refuses and the mint cannot be
+    // swapped. The ground vanity address warhdDBRacMw…
+    // is reserved for it; redeem, re-run init-trackers.mjs, then update.
+    //
+    // This has to match what the tracker records or the site derives a share
+    // account that does not exist, and a holder cannot see — let alone
+    // redeem — what they own.
+    shareMint: "59SgAUGMAQUYCHJFrQve9vnDLeqcNDL5ToM3Xb41eApX",
     name: "AI Infrastructure",
     status: "live",
     accent: "#A855F7",
