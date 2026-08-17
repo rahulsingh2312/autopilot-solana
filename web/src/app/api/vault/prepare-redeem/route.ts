@@ -31,6 +31,23 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * One preparation per wallet at a time, and a cooldown between them.
+ *
+ * A holder's principal cannot reach another holder — selling stock for SOL
+ * changes what the vault holds, not what it is worth. What *is* shared is the
+ * spread on every sale, so someone requesting redemptions they never sign
+ * would slowly bleed the fund on everyone else's behalf. The balance check
+ * below bounds who can do it; this bounds how often.
+ *
+ * In memory, so it resets when the instance does. That is weak against a
+ * determined attacker and adequate against the accidental case this mostly
+ * guards: a user clicking twice, or a page retrying.
+ */
+const COOLDOWN_MS = 30_000;
+const lastPrepared = new Map<string, number>();
+const inFlight = new Set<string>();
+
 /** Selling can take a few Jupiter round trips and several confirmations. */
 export const maxDuration = 60;
 
@@ -79,6 +96,21 @@ export async function POST(request: Request) {
     );
   }
 
+  const now = Date.now();
+  const since = now - (lastPrepared.get(owner) ?? 0);
+  if (inFlight.has(owner)) {
+    return NextResponse.json(
+      { error: "a redemption is already being prepared for this wallet" },
+      { status: 429 },
+    );
+  }
+  if (since < COOLDOWN_MS) {
+    return NextResponse.json(
+      { error: `try again in ${Math.ceil((COOLDOWN_MS - since) / 1000)}s` },
+      { status: 429 },
+    );
+  }
+
   const signer = await managerSigner();
   if (vault.manager !== signer.address) {
     return NextResponse.json(
@@ -87,7 +119,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await raiseForRedemption(rpc, signer, vault, shares);
+  inFlight.add(owner);
+  let result;
+  try {
+    result = await raiseForRedemption(rpc, signer, vault, shares);
+  } finally {
+    inFlight.delete(owner);
+    lastPrepared.set(owner, Date.now());
+  }
 
   return NextResponse.json({
     ready: result.shortfall === 0n,

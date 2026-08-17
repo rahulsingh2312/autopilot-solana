@@ -367,6 +367,28 @@ export function TradeForm({
     onSettled();
     refreshSol();
     refreshShares();
+
+    /**
+     * A deposit arrives as SOL and buys nothing by itself.
+     *
+     * Left alone it drags the fund against its own basket until somebody
+     * rebalances, and every later depositor dilutes the basket further toward
+     * cash. So the settle route is told immediately.
+     *
+     * Deliberately not awaited, and deliberately swallowed: the deposit has
+     * already landed and the holder's shares are already theirs. Whether the
+     * vault converts that SOL in the next ten seconds or the next ten minutes
+     * changes nothing about what they own, and a failure here must not be
+     * reported as a failed deposit.
+     */
+    if (mode === "buy") {
+      void fetch("/api/vault/settle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: tracker.ticker }),
+      }).catch(() => {});
+    }
+
     return result.context.signature as string;
   });
 

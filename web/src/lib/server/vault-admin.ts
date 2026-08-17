@@ -101,6 +101,8 @@ export type VaultView = {
   legs: {
     mint: Address;
     symbol: string;
+    /** Target share of the basket. Not uniform: ouroSOL runs 25/20/20/20/10/5. */
+    weightBps: number;
     tokenProgram: Address;
     ata: Address;
     amount: bigint;
@@ -139,7 +141,7 @@ export async function readVault(rpc: Rpc, ticker: string): Promise<VaultView | n
     if (!binding) continue;
     const tokenProgram = binding.tokenProgram as Address;
     const ata = await findAssociatedTokenPdaFor(vault, leg.mint, tokenProgram);
-    legMeta.push({ binding, tokenProgram, ata, mint: leg.mint, feedId: leg.feedId });
+    legMeta.push({ binding, tokenProgram, ata, mint: leg.mint, feedId: leg.feedId, weightBps: leg.weightBps });
     addresses.push(ata, leg.mint, await findPythPriceAccount(leg.feedId));
   }
 
@@ -172,6 +174,7 @@ export async function readVault(rpc: Rpc, ticker: string): Promise<VaultView | n
     return {
       mint: m.mint,
       symbol: m.binding.symbol,
+      weightBps: m.weightBps,
       tokenProgram: m.tokenProgram,
       ata: m.ata,
       amount,
@@ -434,4 +437,154 @@ export async function raiseForRedemption(
   const { value: after } = await rpc.getBalance(v.vault, { commitment: "confirmed" }).send();
   const raised = BigInt(after);
   return { raised, sold, shortfall: need > 0n ? need : 0n, unsold };
+}
+
+/**
+ * Buy a leg with SOL from the sleeve. The mirror of `sellLegForSol`.
+ */
+export async function buyLegWithSol(
+  rpc: Rpc,
+  signer: Awaited<ReturnType<typeof managerSigner>>,
+  v: VaultView,
+  leg: VaultView["legs"][number],
+  lamports: bigint,
+): Promise<string | null> {
+  if (lamports <= 0n) return null;
+
+  const vaultWsol = await findAssociatedTokenPdaFor(v.vault, WSOL, TOKEN_PROGRAM);
+  const plan = await planRoute(rpc, v.vault, WSOL, leg.mint, lamports);
+  if (!plan) return null;
+
+  const instructions: Instruction[] = [];
+  const { value: wsolInfo } = await rpc
+    .getAccountInfo(vaultWsol, { commitment: "confirmed", encoding: "base64" })
+    .send();
+  if (!wsolInfo) {
+    instructions.push({
+      programAddress: ATA_PROGRAM,
+      accounts: [
+        { address: signer.address, role: AccountRole.WRITABLE_SIGNER },
+        { address: vaultWsol, role: AccountRole.WRITABLE },
+        { address: v.vault, role: AccountRole.READONLY },
+        { address: WSOL, role: AccountRole.READONLY },
+        { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
+        { address: TOKEN_PROGRAM, role: AccountRole.READONLY },
+      ],
+      data: new Uint8Array([1]),
+    });
+  }
+
+  instructions.push({
+    programAddress: PROGRAM_ID,
+    accounts: [
+      { address: signer.address, role: AccountRole.READONLY_SIGNER },
+      { address: v.trackerAddress, role: AccountRole.READONLY },
+      { address: v.vault, role: AccountRole.WRITABLE },
+      { address: vaultWsol, role: AccountRole.WRITABLE },
+      { address: leg.ata, role: AccountRole.WRITABLE },
+      { address: WSOL, role: AccountRole.READONLY },
+      { address: leg.mint, role: AccountRole.READONLY },
+      { address: leg.tokenProgram, role: AccountRole.READONLY },
+      { address: SYSTEM_PROGRAM, role: AccountRole.READONLY },
+      { address: JUPITER_PROGRAM, role: AccountRole.READONLY },
+      ...plan.accounts.map((a) => ({
+        address: a.pubkey,
+        role:
+          a.pubkey === v.vault
+            ? a.isWritable ? AccountRole.WRITABLE : AccountRole.READONLY
+            : roleOf(a),
+      })),
+    ],
+    data: cat(new Uint8Array([IX_SWAP_LEG]), u64le(lamports), u64le(plan.minOut), plan.routeData),
+  });
+
+  const { value: blockhash } = await rpc.getLatestBlockhash().send();
+  let message = pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(signer, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(blockhash, m),
+    (m) => appendTransactionMessageInstructions(instructions, m),
+    (m) => addSignersToTransactionMessage([signer], m),
+  );
+  if (Object.keys(plan.lookupTables).length > 0) {
+    message = compressTransactionMessageUsingAddressLookupTables(message, plan.lookupTables) as typeof message;
+  }
+
+  const signed = await signTransactionMessageWithSigners(message);
+  const wire = getBase64EncodedWireTransaction(signed);
+  const { value: sim } = await rpc
+    .simulateTransaction(wire, {
+      encoding: "base64",
+      commitment: "confirmed",
+      replaceRecentBlockhash: false,
+      sigVerify: true,
+    })
+    .send();
+  if (sim.err) return null;
+
+  const signature = getSignatureFromTransaction(signed);
+  await rpc.sendTransaction(wire, { encoding: "base64", preflightCommitment: "confirmed" }).send();
+  for (let i = 0; i < 45; i++) {
+    const { value } = await rpc.getSignatureStatuses([signature]).send();
+    if (value[0]?.err) return null;
+    if (value[0]?.confirmationStatus === "confirmed" || value[0]?.confirmationStatus === "finalized") {
+      return signature;
+    }
+    await new Promise((r) => setTimeout(r, 800));
+  }
+  return null;
+}
+
+/** The vault keeps only what it needs to operate. Not a share of the fund. */
+export const FLOOR_LAMPORTS = 2_000_000n;
+
+/** Below this a trade costs more in spread than the position is worth. */
+export const MIN_TRADE_LAMPORTS = 5_000_000n;
+
+/**
+ * Put idle SOL to work.
+ *
+ * Called after a deposit lands, and after a redemption that left the sleeve
+ * fat — the two ways a vault ends up holding cash it was not meant to hold. A
+ * holder paid SOL to own stocks; SOL sitting in the vault is not what they
+ * bought, and it drags the fund against its own basket for as long as it sits.
+ *
+ * Buys the most underweight leg first, so a single pass moves the basket
+ * further toward its published weights than spreading the same money evenly
+ * would.
+ */
+export async function investIdleSol(
+  rpc: Rpc,
+  signer: Awaited<ReturnType<typeof managerSigner>>,
+  v: VaultView,
+): Promise<{ invested: bigint; bought: string[] }> {
+  const spendable = v.sleeve > FLOOR_LAMPORTS ? v.sleeve - FLOOR_LAMPORTS : 0n;
+  if (spendable < MIN_TRADE_LAMPORTS) return { invested: 0n, bought: [] };
+
+  const investable = v.netAssets > FLOOR_LAMPORTS ? v.netAssets - FLOOR_LAMPORTS : 0n;
+  const shortfalls = v.legs
+    // The tracker's own weight, not an assumed equal split — ouroSOL runs
+    // 25/20/20/20/10/5 and treating that as six equal legs would buy the wrong
+    // basket entirely.
+    .map((leg) => ({ leg, target: (investable * BigInt(leg.weightBps)) / 10_000n }))
+    .map(({ leg, target }) => ({ leg, short: target > leg.lamports ? target - leg.lamports : 0n }))
+    .filter((x) => x.short > 0n)
+    .sort((a, b) => (b.short > a.short ? 1 : -1));
+
+  let budget = spendable;
+  let invested = 0n;
+  const bought: string[] = [];
+
+  for (const { leg, short } of shortfalls) {
+    if (budget < MIN_TRADE_LAMPORTS) break;
+    const amount = short < budget ? short : budget;
+    if (amount < MIN_TRADE_LAMPORTS) continue;
+    const sig = await buyLegWithSol(rpc, signer, v, leg, amount);
+    if (!sig) continue;
+    bought.push(leg.symbol);
+    invested += amount;
+    budget -= amount;
+  }
+
+  return { invested, bought };
 }
