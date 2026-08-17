@@ -7,6 +7,7 @@ import useSWR from "swr";
 
 import type { AppClient } from "@/app/providers";
 import { shareMintOf } from "@/lib/config";
+import { tokenProgramOfMint } from "@/lib/leg-bindings";
 import {
   decodeMintSupply,
   decodeTokenAmount,
@@ -16,6 +17,15 @@ import {
   findVaultPda,
   type TrackerAccount,
 } from "./program";
+import { findAssociatedTokenPdaFor, findPythPriceAccount, SOL_USD_FEED_ID, isZeroMint } from "./oracle";
+import {
+  computeNav,
+  legValueLamports,
+  readMintDecimals,
+  readPythPrice,
+  scaledUiMultiplierMicros,
+  type Holding,
+} from "./nav";
 
 export type VaultSnapshot = {
   /** The vault these numbers came from. Callers that swap tickers render this
@@ -29,7 +39,26 @@ export type VaultSnapshot = {
   tracker: TrackerAccount | null;
   supply: bigint;
   vaultLamports: bigint;
+  /**
+   * Everything the fund owns, in lamports: the SOL sleeve plus every leg
+   * valued at its Pyth price.
+   *
+   * This used to be the vault's lamport balance alone, which was right only
+   * while the vaults held nothing but SOL. Once habitSOL bought its legs, the
+   * sleeve was 3% of the fund and the site published a NAV of 0.0301 against a
+   * true 0.9792.
+   */
   netAssets: bigint;
+  /** The uninvested part. Equal to `netAssets` for a vault that holds no legs. */
+  sleeveLamports: bigint;
+  /** Per-leg composition, in basket order. */
+  holdings: Holding[];
+  /**
+   * False when a leg could not be priced, which makes `netAssets` a lower
+   * bound rather than a valuation. The UI must not print a NAV as fact when
+   * this is false.
+   */
+  navComplete: boolean;
 };
 
 const base64 = getBase64Encoder();
@@ -50,28 +79,102 @@ export function useVault(ticker: string, refreshMs = 10_000) {
     const trackerAddress = await findTrackerPda(ticker);
     const vaultAddress = await findVaultPda(trackerAddress);
     // The share mint is a vanity keypair, not a PDA, so it cannot be derived —
-    // it comes from config. That is the cost of a chosen address, and it has to
-    // be known *before* the fetch below rather than read out of the tracker
-    // account, or the single-round-trip guarantee above is lost.
+    // it comes from config.
     const shareMintAddress = shareMintOf(ticker) as Address;
 
-    const { value } = await client.rpc
-      .getMultipleAccounts([trackerAddress, shareMintAddress, vaultAddress], {
-        commitment: "confirmed",
-        encoding: "base64",
-      })
+    const { value: trackerValue } = await client.rpc
+      .getAccountInfo(trackerAddress, { commitment: "confirmed", encoding: "base64" })
       .send();
 
-    const [trackerInfo, mintInfo, vaultInfo] = value;
-
-    const tracker = trackerInfo
-      ? decodeTracker(decodeBase64(trackerInfo.data[0]))
+    const tracker = trackerValue
+      ? decodeTracker(decodeBase64(trackerValue.data[0]))
       : null;
-    const supply = mintInfo ? decodeMintSupply(decodeBase64(mintInfo.data[0])) : 0n;
+
+    const empty = {
+      ticker,
+      trackerAddress,
+      vaultAddress,
+      shareMintAddress,
+      tracker,
+      supply: 0n,
+      vaultLamports: 0n,
+      netAssets: 0n,
+      sleeveLamports: 0n,
+      holdings: [] as Holding[],
+      navComplete: true,
+    };
+    if (!tracker) return empty;
+
+    // A second round trip is unavoidable: the legs are only known once the
+    // tracker is decoded. Everything NAV depends on goes in *this* batch —
+    // the vault, the share mint, and all three accounts per leg — so the
+    // number is computed from one slot and cannot mix a supply from one block
+    // with a price from another.
+    const legs = tracker.legs.filter((leg) => !isZeroMint(leg.mint));
+    const solPriceAddress = await findPythPriceAccount(SOL_USD_FEED_ID);
+
+    const legAddresses: Address[] = [];
+    for (const leg of legs) {
+      const tokenProgram = tokenProgramOfMint(leg.mint) as Address;
+      legAddresses.push(
+        await findAssociatedTokenPdaFor(vaultAddress, leg.mint, tokenProgram),
+        leg.mint,
+        await findPythPriceAccount(leg.feedId),
+      );
+    }
+
+    const { value } = await client.rpc
+      .getMultipleAccounts(
+        [vaultAddress, shareMintAddress, solPriceAddress, ...legAddresses],
+        { commitment: "confirmed", encoding: "base64" },
+      )
+      .send();
+
+    const [vaultInfo, mintInfo, solPriceInfo, ...legInfos] = value;
+
     const vaultLamports = vaultInfo ? BigInt(vaultInfo.lamports) : 0n;
-    const rentReserve = tracker?.rentReserve ?? 0n;
-    const netAssets =
+    const supply = mintInfo ? decodeMintSupply(decodeBase64(mintInfo.data[0])) : 0n;
+    const rentReserve = tracker.rentReserve ?? 0n;
+    const sleeveLamports =
       vaultLamports > rentReserve ? vaultLamports - rentReserve : 0n;
+
+    const sol = solPriceInfo ? readPythPrice(decodeBase64(solPriceInfo.data[0])) : null;
+    const now = BigInt(Math.floor(Date.now() / 1000));
+
+    const holdings: Holding[] = legs.map((leg, i) => {
+      const [tokenInfo, mintAccount, priceInfo] = legInfos.slice(i * 3, i * 3 + 3);
+      const balance = tokenInfo ? decodeTokenAmount(decodeBase64(tokenInfo.data[0])) : 0n;
+      const mintData = mintAccount ? decodeBase64(mintAccount.data[0]) : null;
+      const decimals = mintData ? (readMintDecimals(mintData) ?? 0) : 0;
+      const multiplierMicros = mintData ? scaledUiMultiplierMicros(mintData, now) : 1_000_000n;
+      const equity = priceInfo ? readPythPrice(decodeBase64(priceInfo.data[0])) : null;
+
+      // A zero balance is worth zero whether or not the oracle answered, so it
+      // is not "unpriced" — only a position we hold and cannot value is.
+      const unpriced = balance > 0n && (!equity || !sol);
+      const lamports =
+        equity && sol && balance > 0n
+          ? legValueLamports({ balance, decimals, multiplierMicros, equity, sol })
+          : 0n;
+
+      return {
+        index: i,
+        mint: leg.mint,
+        weightBps: leg.weightBps,
+        balance,
+        decimals,
+        units: Number(balance) / 10 ** decimals * (Number(multiplierMicros) / 1e6),
+        lamports,
+        actualBps: null,
+        priceUsd: equity ? Number(equity.price) * 10 ** equity.exponent : null,
+        unpriced,
+      };
+    });
+
+    const { netAssets, complete } = computeNav({ sleeveLamports, holdings });
+    for (const h of holdings) {
+      h.actualBps = netAssets > 0n ? Number((h.lamports * 10_000n) / netAssets) : null;
+    }
 
     return {
       ticker,
@@ -82,6 +185,9 @@ export function useVault(ticker: string, refreshMs = 10_000) {
       supply,
       vaultLamports,
       netAssets,
+      sleeveLamports,
+      holdings,
+      navComplete: complete,
     };
   }, [client, ticker]);
 

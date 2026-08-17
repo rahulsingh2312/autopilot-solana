@@ -2,12 +2,14 @@
 
 import { SolMark } from "@/components/ui/sol-mark";
 import { TokenTicker } from "@/components/ui/token-icon";
+import { TokenMark, useXstocks } from "@/components/trackers/token-mark";
 import {
   BRAND,
   CLUSTER,
   EXPLORER,
   LIVE_TRACKERS,
   PROGRAM_ID,
+  TRACKERS,
 } from "@/lib/config";
 import {
   computeNav,
@@ -31,6 +33,56 @@ function AddressLink({ address, label }: { address: string; label: string }) {
   );
 }
 
+/**
+ * What the vault actually holds, as marks.
+ *
+ * A vault that has taken deposits but never had its legs bought holds only
+ * SOL, and that is a materially different thing from one tracking its basket.
+ * Showing the marks makes the difference visible without anyone reading a
+ * number: four logos means four positions, no logos means the SOL never got
+ * converted.
+ */
+function Holdings({ ticker }: { ticker: string }) {
+  const { snapshot } = useVault(ticker, 15_000);
+  const assets = useXstocks();
+  const config = TRACKERS.find((t) => t.ticker === ticker);
+
+  const held = (snapshot?.holdings ?? []).filter((h) => h.balance > 0n);
+  if (!snapshot?.tracker) return <span className="text-faint">n/a</span>;
+  if (held.length === 0) {
+    return (
+      <span className="num text-[0.6875rem] text-faint" title="Deposits have not been converted into the basket yet">
+        SOL only
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      {held.map((h) => {
+        // The basket is ordered, so index maps straight back to the leg the
+        // config names — no matching on mint, which repeats across trackers.
+        const leg = config?.legs[h.index];
+        const symbol = leg?.symbol ?? "?";
+        return (
+          <span
+            key={`${h.mint}-${h.index}`}
+            title={`${symbol}: ${h.units.toLocaleString(undefined, { maximumFractionDigits: 6 })} units, ${
+              h.actualBps !== null ? (h.actualBps / 100).toFixed(1) : "?"
+            }% of the vault`}
+          >
+            <TokenMark
+              symbol={symbol}
+              asset={leg?.xstock ? assets[leg.xstock] : undefined}
+              size={18}
+            />
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 function VaultRow({ ticker }: { ticker: string }) {
   const { snapshot } = useVault(ticker, 15_000);
   const deployed = Boolean(snapshot?.tracker);
@@ -44,11 +96,27 @@ function VaultRow({ ticker }: { ticker: string }) {
         {snapshot ? (
           <AddressLink
             address={snapshot.shareMintAddress}
-            label={truncateAddress(snapshot.shareMintAddress, 5)}
+            label={truncateAddress(snapshot.shareMintAddress, 4)}
           />
         ) : (
           <span className="text-faint">…</span>
         )}
+      </td>
+      {/* The vault as well as the token. They answer different questions —
+          the mint is what you hold, the vault is where the assets sit — and a
+          skeptic checking the second should not have to derive it. */}
+      <td className="hidden py-2.5 pr-2 sm:table-cell sm:pr-3">
+        {snapshot ? (
+          <AddressLink
+            address={snapshot.vaultAddress}
+            label={truncateAddress(snapshot.vaultAddress, 4)}
+          />
+        ) : (
+          <span className="text-faint">…</span>
+        )}
+      </td>
+      <td className="py-2.5 pr-2 sm:pr-3">
+        <Holdings ticker={ticker} />
       </td>
       <td className="num py-2.5 text-right tabular-nums text-ink sm:pr-3">
         {deployed && snapshot ? (
@@ -57,6 +125,12 @@ function VaultRow({ ticker }: { ticker: string }) {
             <span className="grad-num font-semibold">
               {lamportsToSolNumber(snapshot.netAssets).toFixed(4)}
             </span>
+            {/* An unpriced leg makes the total a floor, not a valuation. */}
+            {snapshot.navComplete ? null : (
+              <span className="text-faint" title="A leg could not be priced, so this is a lower bound">
+                {" "}+?
+              </span>
+            )}
           </>
         ) : (
           "n/a"
@@ -94,11 +168,15 @@ export function Proof() {
                 <tr className="text-left">
                   <th className="meta pb-2 pr-3 font-medium">Tracker</th>
                   <th className="meta pb-2 pr-3 font-medium">Token</th>
+                  <th className="meta hidden pb-2 pr-3 font-medium sm:table-cell">
+                    Vault
+                  </th>
+                  <th className="meta pb-2 pr-3 font-medium">Holds</th>
                   <th className="meta pb-2 text-right font-medium sm:pr-3">
                     In vault
                   </th>
-                  {/* NAV is 1.0000 on every live vault today and it is the first
-                      thing to cut when the row will not fit a phone. */}
+                  {/* NAV is the first thing to cut when the row will not fit a
+                      phone: the SOL total beside it already carries the size. */}
                   <th className="meta hidden pb-2 text-right font-medium sm:table-cell">
                     NAV
                   </th>
