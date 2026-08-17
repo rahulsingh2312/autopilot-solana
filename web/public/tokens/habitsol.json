@@ -1,0 +1,29 @@
+{
+  "name": "Habit",
+  "symbol": "habitSOL",
+  "description": "McDonald's, Coca-Cola, PepsiCo and Exxon Mobil, equally weighted. Fast food, sugar, caffeine and fuel \u2014 four businesses nobody decides about. Deposit SOL to mint habitSOL, burn it back for SOL at NAV any time. Holdings: MCD, KO, PEP, XOM. Solana deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://sol.copycat.my/tokens/habitsol.png",
+  "external_url": "https://sol.copycat.my",
+  "attributes": [
+    {
+      "trait_type": "Tracks",
+      "value": "Things people do not stop buying"
+    },
+    {
+      "trait_type": "Source",
+      "value": "Editorial. Curated by Copycat."
+    },
+    {
+      "trait_type": "Rebalance",
+      "value": "Quarterly, back to equal weight"
+    },
+    {
+      "trait_type": "Filing delay",
+      "value": "None. There is no filing."
+    },
+    {
+      "trait_type": "Holdings",
+      "value": "4"
+    }
+  ]
+}
