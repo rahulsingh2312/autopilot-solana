@@ -25,7 +25,21 @@ export const RPC_URL =
 export const RPC_WS_URL =
   process.env.NEXT_PUBLIC_SOLANA_RPC_WS_URL ?? RPC_URL.replace(/^http/, "ws");
 
-export const CHAIN = `solana:${CLUSTER}` as const;
+/**
+ * The Wallet Standard chain identifier — **not** the RPC cluster name.
+ *
+ * The two differ for mainnet and only for mainnet: the cluster is
+ * `mainnet-beta`, the chain is `solana:mainnet`. Interpolating the cluster
+ * produced `solana:mainnet-beta`, which no wallet declares support for, so
+ * Wallet Standard discovery matched nothing and the site told everyone with a
+ * wallet installed to go and get a wallet.
+ *
+ * Devnet hid the bug for as long as it lasted, because `solana:devnet` is both
+ * the cluster name and the chain id.
+ */
+export const CHAIN = (CLUSTER === "mainnet-beta"
+  ? "solana:mainnet"
+  : "solana:devnet") as "solana:mainnet" | "solana:devnet";
 
 /**
  * The Pinocchio program. Same product, a quarter of the binary.
@@ -147,20 +161,20 @@ export const TRACKERS: TrackerConfig[] = [
     status: "live",
     accent: "#F7931A",
     accentInk: "#05080F",
-    portrait: null,
-    portraitAlt: "A snake eating its own tail, drawn in ink dots",
+    portrait: "/avatars/ourosol.png",
+    portraitAlt: "A snake eating its own tail",
     subject: "Crypto, listed",
-    hook: "Companies whose earnings are a bet on crypto, bought with crypto.",
+    hook: "Six companies whose earnings run on crypto. Bought with crypto.",
     about: [
-      "Six listed companies that are, underneath the filings, leveraged positions on the same thing you are paying with. Circle issues USDC and earns the interest on its reserves. Strategy is a bitcoin holding company with a software segment attached, and STRC is the preferred stock it issues to buy more. Coinbase and Robinhood are the toll booths. GameStop is what happens when a retailer discovers the balance sheet is more interesting than the stores.",
-      "The name is the argument. You spend SOL to mint a token that holds equities whose value depends on the price of crypto \u2014 a position that eats its own tail. Every leg is priced by Pyth against the underlying listed share, so the vault knows what it holds even when the reflexivity does not.",
+      "Six public companies that are, underneath the filings, leveraged bets on the same thing you are paying with. Circle issues USDC and keeps the interest on the float. Strategy is a bitcoin holding company with a software segment bolted on, and STRC is the preferred stock it issues to buy more. Coinbase and Robinhood own the toll booths. GameStop is what happens when a retailer works out the balance sheet is more interesting than the stores.",
+      "The name is the argument. You spend SOL to mint a token holding equities whose value tracks the price of crypto, a position that eats its own tail. Every leg is priced by Pyth against the underlying listed share, so the vault always knows exactly what it holds.",
     ],
     source: "Editorial. Curated by Copycat.",
     sourceUrl: "https://www.sec.gov/edgar/search/",
     rebalance: "Quarterly, back to target weight",
     filingDelay: "None. There is no filing.",
     caveat:
-      "This is not diversification, it is the same trade six times. When crypto falls these do not fall independently \u2014 they fall together, and usually harder than the asset they track, because most of them carry leverage or hold the asset outright. Buying it with SOL means a drawdown hits the vault and your denominator at once.",
+      "This is not diversification. It is the same trade six times. When crypto falls these fall together, and usually harder than the asset they track, because most of them carry leverage or hold the asset outright. Buying it with SOL means a drawdown hits the vault and your denominator at once.",
     legs: [
       { symbol: "COIN", company: "Coinbase", weightBps: 2500, tokenized: true, xstock: "COINx" },
       { symbol: "CRCL", company: "Circle", weightBps: 2000, tokenized: true, xstock: "CRCLx" },
@@ -177,20 +191,20 @@ export const TRACKERS: TrackerConfig[] = [
     status: "live",
     accent: "#DC2626",
     accentInk: "#FFFFFF",
-    portrait: null,
-    portraitAlt: "A paper cup, a bottle and a fuel nozzle, drawn in ink dots",
+    portrait: "/avatars/habitsol.png",
+    portraitAlt: "A takeaway coffee cup",
     subject: "Things people do not stop buying",
-    hook: "Fast food, sugar, caffeine and fuel. Four businesses nobody decides about.",
+    hook: "Fast food, sugar, caffeine and fuel. Demand nobody votes on.",
     about: [
-      "McDonald's, Coca-Cola, PepsiCo and Exxon Mobil, equally weighted. The usual name for this basket is defensive, which is a portfolio manager's word for the same observation stated less clearly: none of these are decisions. People do not evaluate whether to buy a Coke, and they do not stop commuting because the market fell.",
-      "That is the whole thesis, and it is why the basket is boring on purpose. It will lag badly in a year when everything works. It is here to be the part of the lineup that is not a bet on technology, on crypto, or on somebody's disclosed trades.",
+      "McDonald's, Coca-Cola, PepsiCo and Exxon Mobil, equally weighted. Managers call this defensive. The plainer version: none of these are decisions. Nobody evaluates whether to buy a Coke, and nobody stops commuting because the market fell.",
+      "That is the whole thesis. Four companies selling into demand that shows up whatever the market is doing, compounding through cycles that wipe out the exciting stuff. It is the part of the lineup that is not a bet on technology, on crypto, or on somebody's disclosed trades.",
     ],
     source: "Editorial. Curated by Copycat.",
     sourceUrl: "https://www.sec.gov/edgar/search/",
     rebalance: "Quarterly, back to equal weight",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Boring is not safe. Three of these four sell things a growing share of buyers are actively trying to consume less of, and the fourth sells the thing the energy transition is aimed at. Equal weight also means a quarter of this basket is a single oil major, so an oil price shock moves it more than the word defensive suggests.",
+      "Boring is not safe. Three of these four sell things a growing share of buyers are trying to consume less of, and the fourth sells the thing the energy transition is aimed at. Equal weight puts a quarter of the basket in a single oil major, so an oil shock moves it more than the word defensive suggests.",
     legs: [
       { symbol: "MCD", company: "McDonald's", weightBps: 2500, tokenized: true, xstock: "MCDx" },
       { symbol: "KO", company: "Coca-Cola", weightBps: 2500, tokenized: true, xstock: "KOx" },
@@ -205,12 +219,12 @@ export const TRACKERS: TrackerConfig[] = [
     status: "live",
     accent: "#35D07F",
     accentInk: "#05080F",
-    portrait: "/portraits/cramer.jpg",
+    portrait: "/portraits/cramer-bw.jpg",
     portraitAlt: "Jim Cramer",
     subject: "Jim Cramer",
-    hook: "He is still on television every weeknight. That is the whole thesis.",
+    hook: "He is on television every weeknight. That is the whole thesis.",
     about: [
-      "Six of the most-shouted-about names on cable, held as tokenized equities. An index built from a running joke, and we run it seriously: fixed weights, monthly rebalance, every move on chain.",
+      "Six of the loudest names on cable, held as tokenized equities. An index built from a running joke and run completely straight: fixed weights, monthly rebalance, every move on chain where you can check it.",
       "For the record, the meme has been measured. Quiver Quantitative backtests an inverse-Cramer strategy from January 2021 at a 42.7% win rate over 3,427 trades, a Sharpe of -0.171 and -13.99% in the last year. The ETF that tried it, SJIM, closed in February 2024. This index is editorial, not a filing.",
     ],
     source: "Editorial. Curated by Copycat from Mad Money coverage.",
@@ -240,17 +254,17 @@ export const TRACKERS: TrackerConfig[] = [
     portrait: "/avatars/mg7sol.png",
     portraitAlt: "A numeral seven, drawn in ink dots",
     subject: "Big Tech",
-    hook: "The seven companies that ate the index. Equal weighted, so the biggest one does not become the whole thing.",
+    hook: "The seven companies that ate the index. Equal weighted, so one name cannot become the whole thing.",
     about: [
-      "Nvidia, Microsoft, Apple, Amazon, Alphabet, Meta and Tesla. Between them they are roughly a third of the S&P 500, which means most people who think they own a diversified index mostly own these seven.",
-      "Held at equal weight rather than by market cap. A cap-weighted version would put close to a quarter of the basket in one name and turn the other six into rounding errors; equal weight is a decision to hold the group rather than the leader.",
+      "Nvidia, Microsoft, Apple, Amazon, Alphabet, Meta and Tesla. Between them, roughly a third of the S&P 500. Most people who think they own a diversified index already own these seven, just without saying so.",
+      "Held at equal weight rather than by market cap. Cap weighting would put close to a quarter of the basket in one name and turn the other six into rounding errors. Equal weight is a decision to own the group, not the leader.",
     ],
     source: "Editorial. Curated by Copycat.",
     sourceUrl: "https://www.spglobal.com/spdji/en/indices/equity/sp-500/",
     rebalance: "Quarterly, back to equal weight",
     filingDelay: "None. There is no filing.",
     caveat:
-      "Copycat picks these names. There is no filing, no index provider, and no rule you can audit — the membership of the \u201cMagnificent Seven\u201d is a press coinage, not a definition. It is also seven correlated US technology companies, so this is a concentrated bet dressed as a basket.",
+      "Copycat picks these names. There is no filing, no index provider, and no rule you can audit. The membership of the \u201cMagnificent Seven\u201d is a press coinage, not a definition. It is also seven correlated US technology companies, so this is a concentrated bet dressed as a basket.",
     legs: [
       { symbol: "NVDA", company: "NVIDIA", weightBps: 1429, tokenized: true, xstock: "NVDAx" },
       { symbol: "MSFT", company: "Microsoft", weightBps: 1429, tokenized: true, xstock: "MSFTx" },

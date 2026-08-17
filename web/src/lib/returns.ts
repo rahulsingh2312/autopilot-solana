@@ -35,6 +35,7 @@ export function useTrackerReturns(tracker: TrackerConfig) {
     data?.trackers.find((entry) => entry.ticker === tracker.ticker) ?? null;
 
   const oneYear = returns?.windows.find((w) => w.label === "1Y") ?? null;
+  const threeYear = returns?.windows.find((w) => w.label === "3Y") ?? null;
   const benchOneYear =
     data?.benchmark?.windows.find((w) => w.label === "1Y") ?? null;
 
@@ -53,6 +54,13 @@ export function useTrackerReturns(tracker: TrackerConfig) {
     windows: returns?.windows ?? [],
     /** Trailing-year total return, as a fraction. */
     oneYear: oneYear?.value ?? null,
+    /**
+     * Three-year return, **annualised** — a per-year rate, not a total. It is
+     * not comparable with `oneYear` and must never be rendered beside it
+     * without saying which is which.
+     */
+    threeYear: threeYear?.value ?? null,
+    threeYearCoverageBps: threeYear?.coverageBps ?? 0,
     /** Share of basket weight the trailing-year number covers, in bps. */
     coverageBps: oneYear?.coverageBps ?? 0,
     /** Per-leg trailing-year return, keyed by equity symbol. */

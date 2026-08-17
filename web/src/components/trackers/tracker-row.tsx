@@ -15,21 +15,27 @@ import { useVault } from "@/lib/vault/hooks";
 import { TokenMark, useXstocks } from "./token-mark";
 
 /**
- * The basket's trailing year, on the right where the eye can run down the
+ * The basket over three years, on the right where the eye can run down the
  * column and compare funds without opening any of them.
  *
- * Labelled "1Y backtest", never "1Y". There is no room on a list row for the
- * full method, so the one word that stops it being read as a track record has
- * to be the word that is there. The long version lives on the fund panel.
+ * Labelled "backtest", never bare. There is no room on a list row for the full
+ * method, so the one word that stops it being read as a track record has to be
+ * the word that is there. The long version lives on the fund panel.
+ *
+ * **The number is annualised**, because that is how `WINDOWS` defines 3Y — a
+ * per-year rate, not the total move over three years. The label says `p.a.`
+ * for that reason and the two must be changed together; a three-year total
+ * shown as a yearly rate would overstate every basket on the page by roughly
+ * threefold.
  *
  * Every row shares one SWR key, so seven of these cost one request.
  */
-function TrailingYear({ tracker }: { tracker: TrackerConfig }) {
-  const { oneYear, isLoading } = useTrackerReturns(tracker);
+function TrailingReturn({ tracker }: { tracker: TrackerConfig }) {
+  const { threeYear, isLoading } = useTrackerReturns(tracker);
 
   // A basket with no tokenized leg has nothing to price, so it gets no number rather than a
   // zero. Nothing renders, and the arrow keeps its place.
-  if (oneYear === null) return null;
+  if (threeYear === null) return null;
 
   return (
     <span
@@ -39,13 +45,13 @@ function TrailingYear({ tracker }: { tracker: TrackerConfig }) {
     >
       <span
         className={`num text-lg font-semibold tabular-nums sm:text-xl ${
-          oneYear >= 0 ? "text-pos" : "text-neg"
+          threeYear >= 0 ? "text-pos" : "text-neg"
         }`}
       >
-        {formatReturn(oneYear)}
+        {formatReturn(threeYear)}
       </span>
       <span className="num text-[0.625rem] uppercase tracking-wider text-faint">
-        1Y backtest
+        3Y backtest · p.a.
       </span>
     </span>
   );
@@ -142,7 +148,7 @@ export function TrackerRow({
           </span>
         </div>
 
-        <TrailingYear tracker={tracker} />
+        <TrailingReturn tracker={tracker} />
 
         <svg
           aria-hidden

@@ -1,9 +1,9 @@
 {
   "name": "Habit",
   "symbol": "habitSOL",
-  "description": "McDonald's, Coca-Cola, PepsiCo and Exxon Mobil, equally weighted. Fast food, sugar, caffeine and fuel \u2014 four businesses nobody decides about. Deposit SOL to mint habitSOL, burn it back for SOL at NAV any time. Holdings: MCD, KO, PEP, XOM. Solana deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://sol.copycat.my/tokens/habitsol.png",
-  "external_url": "https://sol.copycat.my",
+  "description": "Fast food, sugar, caffeine and fuel. Demand nobody votes on. Deposit SOL to mint habitSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and habitSOL holdings update when it changes. Holdings: MCD, KO, PEP, XOM. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/habitsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
     {
       "trait_type": "Tracks",
@@ -24,6 +24,10 @@
     {
       "trait_type": "Holdings",
       "value": "4"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
     }
   ]
 }

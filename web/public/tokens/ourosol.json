@@ -1,9 +1,9 @@
 {
   "name": "Ouroboros",
   "symbol": "ouroSOL",
-  "description": "Six listed companies that are, underneath the filings, leveraged positions on the same thing you are paying with. Circle issues USDC and earns the interest on its reserves. Strategy is a bitcoin holding company with a software segment attached. Coinbase and Robinhood are the toll booths. Deposit SOL to mint ouroSOL, burn it back for SOL at NAV any time. Holdings: COIN, CRCL, HOOD, MSTR, STRC, GME. Solana deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://sol.copycat.my/tokens/ourosol.png",
-  "external_url": "https://sol.copycat.my",
+  "description": "Six companies whose earnings run on crypto. Bought with crypto. Deposit SOL to mint ouroSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and ouroSOL holdings update when it changes. Holdings: COIN, CRCL, HOOD, MSTR, STRC, GME. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/ourosol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
     {
       "trait_type": "Tracks",
@@ -24,6 +24,10 @@
     {
       "trait_type": "Holdings",
       "value": "6"
+    },
+    {
+      "trait_type": "Network",
+      "value": "Solana devnet"
     }
   ]
 }

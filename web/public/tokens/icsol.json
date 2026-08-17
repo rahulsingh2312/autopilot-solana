@@ -1,9 +1,9 @@
 {
   "name": "Inverse Cramer Index",
   "symbol": "icSOL",
-  "description": "He is still on television every weeknight. That is the whole thesis. Deposit SOL to mint icSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and icSOL holdings update when it changes. Holdings: NVDA, TSLA, MSTR, COIN, HOOD, CRCL. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
-  "image": "https://sol.copycat.my/tokens/icsol.png",
-  "external_url": "https://sol.copycat.my",
+  "description": "He is on television every weeknight. That is the whole thesis. Deposit SOL to mint icSOL, burn it back for SOL at NAV any time. The source is re-read every 30 seconds and icSOL holdings update when it changes. Holdings: NVDA, TSLA, MSTR, COIN, HOOD, CRCL. Solana devnet deployment by Copycat. Not an ETF, not a registered fund, not investment advice.",
+  "image": "https://autopilot-solana.vercel.app/tokens/icsol.png",
+  "external_url": "https://autopilot-solana.vercel.app",
   "attributes": [
     {
       "trait_type": "Tracks",
